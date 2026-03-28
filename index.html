@@ -83,6 +83,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--f); font-si
 
 /* ── Stat row ── */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+@media (min-width: 1100px) { .stats { grid-template-columns: repeat(7, 1fr); } }
 .stat { background: var(--s1); border: 1px solid var(--border); border-radius: var(--r2); padding: 18px 20px; }
 .stat-lbl { font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
 .stat-val { font-size: 24px; font-weight: 700; font-family: var(--fm); line-height: 1; }
@@ -382,15 +383,21 @@ LAL 湖人 @ 0.93
 
       <!-- 預覽 -->
       <div id="excel-preview" style="display:none;margin-top:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
           <div style="font-size:13px;font-weight:600" id="excel-count"></div>
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('excel-preview').style.display='none'">關閉</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="selectAllRows()">全選</button>
+            <button class="btn btn-ghost btn-sm" onclick="mergeSelected()" style="color:var(--accent-h);border-color:var(--accent)">合併選取</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelExcel()">取消</button>
+            <button class="btn btn-primary btn-sm" onclick="saveExcelRows()">✓ 確認存入</button>
+          </div>
         </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">勾選想合併的注單（需相同賽事+下注隊伍+賠率）→ 按「合併選取」金額相加</div>
         <div class="card">
           <div class="tbl-wrap">
             <table>
               <thead>
-                <tr><th>日期</th><th>類型</th><th>聯賽</th><th>賽事</th><th>下注隊伍</th><th>賠率</th><th>金額</th><th>輸贏</th><th>結果</th></tr>
+                <tr><th style="width:32px"><input type="checkbox" id="chk-all" onchange="toggleAllRows(this.checked)" style="cursor:pointer"></th><th>日期</th><th>類型</th><th>聯賽</th><th>賽事</th><th>下注隊伍</th><th>賠率</th><th>金額</th><th>輸贏</th><th>結果</th><th></th></tr>
               </thead>
               <tbody id="excel-tbody"></tbody>
             </table>
@@ -493,18 +500,18 @@ LAL 湖人 @ 0.93
 
       <div class="chart-grid">
         <div class="card">
-          <div class="card-title">下半場 — 勝率 & 報酬率</div>
+          <div class="card-title">下半場 — 勝率 & 總報酬</div>
           <div class="legend">
             <span class="leg"><span class="leg-sq" style="background:var(--half-c)"></span>勝率（左）</span>
-            <span class="leg"><span class="leg-dsh" style="border-color:var(--win)"></span>報酬率（右）</span>
+            <span class="leg"><span class="leg-dsh" style="border-color:var(--win)"></span>累積總輸贏（右）</span>
           </div>
           <div class="chart-wrap"><canvas id="c-half"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-title">初盤（全場）— 勝率 & 報酬率</div>
+          <div class="card-title">初盤（全場）— 勝率 & 總報酬</div>
           <div class="legend">
             <span class="leg"><span class="leg-sq" style="background:var(--full-c)"></span>勝率（左）</span>
-            <span class="leg"><span class="leg-dsh" style="border-color:var(--win)"></span>報酬率（右）</span>
+            <span class="leg"><span class="leg-dsh" style="border-color:var(--win)"></span>累積總輸贏（右）</span>
           </div>
           <div class="chart-wrap"><canvas id="c-full"></canvas></div>
         </div>
@@ -518,18 +525,31 @@ LAL 湖人 @ 0.93
     <!-- ── Chart ── -->
     <div class="page" id="page-chart">
       <div class="ph"><h1>圖表分析</h1></div>
-      <div class="type-tabs">
-        <button class="type-tab active" onclick="chartTab('all',this)">全部</button>
-        <button class="type-tab t-half" onclick="chartTab('下半場',this)">下半場</button>
-        <button class="type-tab t-full" onclick="chartTab('初盤',this)">初盤</button>
+
+      <!-- 聯賽篩選 -->
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="type-tab active" id="chart-league-NBA" onclick="chartLeague('NBA',this)">NBA</button>
+        <button class="type-tab" id="chart-league-PLG" onclick="chartLeague('PLG',this)">PLG</button>
+        <button class="type-tab" id="chart-league-T1" onclick="chartLeague('T1',this)">T1</button>
+        <button class="type-tab" id="chart-league-MLB" onclick="chartLeague('MLB',this)">MLB</button>
+        <button class="type-tab" id="chart-league-all" onclick="chartLeague('all',this)">全部聯賽</button>
       </div>
+
+      <!-- 類型篩選 -->
+      <div class="type-tabs">
+        <button class="type-tab active" id="chart-type-all" onclick="chartTab('all',this)">全部</button>
+        <button class="type-tab t-half" id="chart-type-half" onclick="chartTab('下半場',this)">下半場</button>
+        <button class="type-tab t-full" id="chart-type-full" onclick="chartTab('初盤',this)">初盤</button>
+        <button class="type-tab" id="chart-type-live" onclick="chartTab('走地',this)" style="border-color:var(--lose);color:var(--lose)">走地</button>
+      </div>
+
       <div class="chart-grid">
         <div class="card">
-          <div class="card-title">每日勝率</div>
+          <div class="card-title" id="c-wr-title">每日勝率</div>
           <div class="chart-wrap"><canvas id="c-wr"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-title">每日報酬率</div>
+          <div class="card-title" id="c-roi-title">每日報酬率</div>
           <div class="chart-wrap"><canvas id="c-roi"></canvas></div>
         </div>
       </div>
@@ -554,6 +574,13 @@ LAL 湖人 @ 0.93
       </div>
 
       <div class="filter-bar">
+        <select id="f-filter-league" onchange="renderHistory()" style="font-family:var(--f)">
+          <option value="NBA">NBA</option>
+          <option value="PLG">PLG</option>
+          <option value="T1">T1</option>
+          <option value="MLB">MLB</option>
+          <option value="">所有聯賽</option>
+        </select>
         <select id="f-filter-type" onchange="renderHistory()" style="font-family:var(--f)">
           <option value="">所有類型</option>
           <option value="下半場">下半場</option>
@@ -709,7 +736,7 @@ function goPage(name) {
   const navEl = document.getElementById('nav-' + name);
   if (navEl) navEl.classList.add('active');
   if (name === 'dashboard') renderDashboard();
-  else if (name === 'chart') renderChartPage('all');
+  else if (name === 'chart') { chartLeagueFilter = 'NBA'; renderChartPage('all'); }
   else if (name === 'history') renderHistory();
 }
 
@@ -768,6 +795,11 @@ function autoProfit() {
 }
 
 async function submitEntry() {
+  if (!document.getElementById('f-date').value) {
+    showAlert('entry-alert', 'err', '⚠ 請先填入日期');
+    document.getElementById('f-date').focus();
+    return;
+  }
   const row = buildRow();
   if (!row) { showAlert('entry-alert', 'err', '請填入日期、金額與結果'); return; }
   if (!sb) { showAlert('entry-alert', 'err', '尚未連線 Supabase'); return; }
@@ -844,20 +876,45 @@ async function submitBatch() {
 function renderDashboard() {
   const bets = allBets;
   const half = bets.filter(r => r.type === '下半場');
-  const full = bets.filter(r => r.type !== '下半場');
+  const full = bets.filter(r => r.type === '初盤');
+  const live = bets.filter(r => r.type === '走地');
 
-  const totalBet = bets.reduce((s, r) => s + (+r.amount || 0), 0);
+  const totalBet    = bets.reduce((s, r) => s + (+r.amount || 0), 0);
   const totalProfit = bets.reduce((s, r) => s + (+r.profit || 0), 0);
-  const wins = bets.filter(r => r.result === '贏').length;
-  const wr = bets.length ? ((wins / bets.length) * 100).toFixed(1) : 0;
-  const roi = totalBet ? ((totalProfit / totalBet) * 100).toFixed(1) : 0;
+  const wins        = bets.filter(r => r.result === '贏').length;
+  const wr          = bets.length ? ((wins / bets.length) * 100).toFixed(1) : '--';
+  const roi         = totalBet ? ((totalProfit / totalBet) * 100).toFixed(1) : '--';
+
+  // 下半場勝率
+  const halfWins = half.filter(r => r.result === '贏').length;
+  const halfWR   = half.length ? ((halfWins / half.length) * 100).toFixed(1) : '--';
+  const halfBet  = half.reduce((s,r) => s + (+r.amount||0), 0);
+  const halfProfit = half.reduce((s,r) => s + (+r.profit||0), 0);
+  const halfROI  = halfBet ? ((halfProfit / halfBet) * 100).toFixed(1) : '--';
+
+  // 初盤勝率
+  const fullWins = full.filter(r => r.result === '贏').length;
+  const fullWR   = full.length ? ((fullWins / full.length) * 100).toFixed(1) : '--';
+  const fullBet  = full.reduce((s,r) => s + (+r.amount||0), 0);
+  const fullProfit = full.reduce((s,r) => s + (+r.profit||0), 0);
+  const fullROI  = fullBet ? ((fullProfit / fullBet) * 100).toFixed(1) : '--';
+
+  // 走地勝率
+  const liveWins   = live.filter(r => r.result === '贏').length;
+  const liveWR     = live.length ? ((liveWins / live.length) * 100).toFixed(1) : '--';
+  const liveBet    = live.reduce((s,r) => s + (+r.amount||0), 0);
+  const liveProfit = live.reduce((s,r) => s + (+r.profit||0), 0);
+  const liveROI    = liveBet ? ((liveProfit / liveBet) * 100).toFixed(1) : '--';
 
   document.getElementById('dash-sub').textContent = `${currentAccount} · 共 ${bets.length} 筆注單`;
   document.getElementById('dash-stats').innerHTML = `
     <div class="stat"><div class="stat-lbl">總投注</div><div class="stat-val">${fmtN(totalBet)}</div><div class="stat-sub">元</div></div>
     <div class="stat"><div class="stat-lbl">淨收益</div><div class="stat-val ${totalProfit>=0?'pos':'neg'}">${totalProfit>=0?'+':''}${fmtN(totalProfit)}</div><div class="stat-sub">元</div></div>
-    <div class="stat"><div class="stat-lbl">整體勝率</div><div class="stat-val ${wr>=50?'pos':'neg'}">${wr}%</div><div class="stat-sub">${wins}W / ${bets.length-wins}L</div></div>
-    <div class="stat"><div class="stat-lbl">報酬率 ROI</div><div class="stat-val ${roi>=0?'pos':'neg'}">${roi>=0?'+':''}${roi}%</div><div class="stat-sub">整體</div></div>
+    <div class="stat"><div class="stat-lbl">整體勝率</div><div class="stat-val ${+wr>=50?'pos':'neg'}">${wr}%</div><div class="stat-sub">${wins}W / ${bets.length-wins}L</div></div>
+    <div class="stat"><div class="stat-lbl">整體報酬率</div><div class="stat-val ${+roi>=0?'pos':'neg'}">${roi!='--'?(+roi>=0?'+':'')+roi+'%':'--'}</div><div class="stat-sub">ROI</div></div>
+    <div class="stat" style="border-color:rgba(192,132,252,.3)"><div class="stat-lbl" style="color:var(--half-c)">下半場勝率</div><div class="stat-val ${+halfWR>=50?'pos':'neg'}">${halfWR}%</div><div class="stat-sub">${halfWins}W / ${half.length-halfWins}L · ROI ${halfROI!='--'?(+halfROI>=0?'+':'')+halfROI+'%':'--'}</div></div>
+    <div class="stat" style="border-color:rgba(96,165,250,.3)"><div class="stat-lbl" style="color:var(--full-c)">初盤勝率</div><div class="stat-val ${+fullWR>=50?'pos':'neg'}">${fullWR}%</div><div class="stat-sub">${fullWins}W / ${full.length-fullWins}L · ROI ${fullROI!='--'?(+fullROI>=0?'+':'')+fullROI+'%':'--'}</div></div>
+    <div class="stat" style="border-color:rgba(248,113,113,.3)"><div class="stat-lbl" style="color:var(--lose)">走地勝率</div><div class="stat-val ${+liveWR>=50?'pos':'neg'}">${liveWR}%</div><div class="stat-sub">${liveWins}W / ${live.length-liveWins}L · ROI ${liveROI!='--'?(+liveROI>=0?'+':'')+liveROI+'%':'--'}</div></div>
   `;
 
   buildDualChart('c-half', half, '#c084fc');
@@ -869,20 +926,32 @@ function buildDualChart(id, recs, color) {
   const grouped = groupDate(recs);
   destroyChart(id);
   if (!grouped.length) return;
-  let cW = 0, cT = 0, cB = 0, cP = 0;
-  const labels=[], wr=[], roi=[];
+  let cW = 0, cT = 0, cP = 0;
+  const labels=[], wr=[], profit=[];
   grouped.forEach(([d, rs]) => {
-    rs.forEach(r => { cT++; cB += +r.amount||0; cP += +r.profit||0; if(r.result==='贏') cW++; });
+    rs.forEach(r => { cT++; cP += +r.profit||0; if(r.result==='贏') cW++; });
     labels.push(d);
     wr.push(+((cW/cT)*100).toFixed(1));
-    roi.push(cB ? +((cP/cB)*100).toFixed(1) : 0);
+    profit.push(Math.round(cP));
   });
   chartRefs[id] = new Chart(document.getElementById(id), {
     data: { labels, datasets: [
       { type:'line', label:'勝率', data:wr, borderColor:color, backgroundColor:color+'1a', fill:true, yAxisID:'yL', tension:.35, pointRadius:4, borderWidth:2 },
-      { type:'line', label:'報酬率', data:roi, borderColor:'#34d399', borderDash:[5,4], yAxisID:'yR', tension:.35, pointRadius:4, borderWidth:2, backgroundColor:'transparent' }
+      { type:'line', label:'累積總輸贏', data:profit, borderColor:'#34d399', borderDash:[5,4], yAxisID:'yR', tension:.35, pointRadius:4, borderWidth:2, backgroundColor:'transparent' }
     ]},
-    options: chartOpts({ yL:{min:0,max:105,color}, yR:{color:'#34d399'} })
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{ display:false }, tooltip:{ callbacks:{
+        label: c => c.dataset.label === '勝率'
+          ? '勝率：' + c.parsed.y.toFixed(1) + '%'
+          : '累積輸贏：' + (c.parsed.y >= 0 ? '+' : '') + fmtN(c.parsed.y)
+      }}},
+      scales: {
+        x:  { ticks:{color:'#71717a',font:{size:11}}, grid:{color:'rgba(255,255,255,0.04)'} },
+        yL: { position:'left',  min:0, max:105, ticks:{color, font:{size:11}, callback:v=>v+'%'}, grid:{color:'rgba(255,255,255,0.04)'} },
+        yR: { position:'right', ticks:{color:'#34d399', font:{size:11}, callback:v=>fmtN(v)}, grid:{drawOnChartArea:false} }
+      }
+    }
   });
 }
 
@@ -907,20 +976,41 @@ function buildProfitLine(id, recs) {
 
 /* ── Chart page ── */
 let chartTabFilter = 'all';
+let chartLeagueFilter = 'NBA';
+
+function chartLeague(league, btn) {
+  chartLeagueFilter = league;
+  document.querySelectorAll('[id^="chart-league-"]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderChartPage(chartTabFilter);
+}
+
 function chartTab(val, btn) {
   chartTabFilter = val;
-  document.querySelectorAll('.type-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('[id^="chart-type-"]').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderChartPage(val);
 }
 
+function getChartBets() {
+  let bets = chartLeagueFilter === 'all' ? allBets : allBets.filter(r => r.league === chartLeagueFilter);
+  return bets;
+}
+
 function renderChartPage(filter) {
-  const bets = filter === 'all' ? allBets : allBets.filter(r => r.type === filter);
-  const half = filter === 'all' ? allBets.filter(r=>r.type==='下半場') : (filter==='下半場' ? bets : []);
-  const full = filter === 'all' ? allBets.filter(r=>r.type!=='下半場') : (filter==='初盤' ? bets : []);
+  const base = getChartBets();
+  const bets = filter === 'all' ? base : base.filter(r => r.type === filter);
+  const half = filter === 'all' ? base.filter(r=>r.type==='下半場') : (filter==='下半場' ? bets : []);
+  const full = filter === 'all' ? base.filter(r=>r.type==='初盤')   : (filter==='初盤'   ? bets : []);
+  const live = filter === 'all' ? base.filter(r=>r.type==='走地')   : (filter==='走地'   ? bets : []);
+
+  const leagueLabel = chartLeagueFilter === 'all' ? '全部' : chartLeagueFilter;
+  document.getElementById('c-wr-title').textContent  = `每日勝率（${leagueLabel}）`;
+  document.getElementById('c-roi-title').textContent = `每日報酬率（${leagueLabel}）`;
+
   buildWRChart('c-wr', half, full, filter);
   buildROIChart('c-roi', half, full, filter);
-  buildBarChart('c-bar', allBets);
+  buildBarChart('c-bar', base);
 }
 
 function buildWRChart(id, half, full, filter) {
@@ -1005,17 +1095,25 @@ function buildBarChart(id, bets) {
 
 /* ── History ── */
 function renderHistory() {
+  const league = document.getElementById('f-filter-league').value;
   const type   = document.getElementById('f-filter-type').value;
   const result = document.getElementById('f-filter-result').value;
   const q      = document.getElementById('f-filter-q').value.toLowerCase();
 
   let bets = [...allBets];
+  if (league) bets = bets.filter(r => r.league === league);
   if (type)   bets = bets.filter(r => r.type === type);
   if (result) bets = bets.filter(r => r.result === result);
   if (q)      bets = bets.filter(r => (r.match_name||'').toLowerCase().includes(q) || (r.bet_team||'').toLowerCase().includes(q));
   bets.sort((a,b) => b.date.localeCompare(a.date));
 
-  const body = document.getElementById('history-body');
+  // 小計
+  const totalAmt    = bets.reduce((s,r) => s + (+r.amount||0), 0);
+  const totalProfit = bets.reduce((s,r) => s + (+r.profit||0), 0);
+  const wins        = bets.filter(r => r.result === '贏').length;
+  const wr          = bets.length ? ((wins/bets.length)*100).toFixed(1) : '--';
+
+  const body  = document.getElementById('history-body');
   const empty = document.getElementById('history-empty');
   if (!bets.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
   empty.style.display = 'none';
@@ -1023,7 +1121,7 @@ function renderHistory() {
   body.innerHTML = bets.map(r => `
     <tr>
       <td>${r.date}</td>
-      <td><span class="badge ${r.type==='下半場'?'badge-half':'badge-full'}">${r.type}</span></td>
+      <td><span class="badge ${r.type==='下半場'?'badge-half':r.type==='走地'?'badge-live':'badge-full'}">${r.type}</span></td>
       <td>${r.league||''}</td>
       <td style="max-width:180px;font-size:12px">${r.match_name||''}</td>
       <td>${r.bet_team||''}</td>
@@ -1033,6 +1131,23 @@ function renderHistory() {
       <td><span class="badge ${r.result==='贏'?'badge-win':'badge-lose'}">${r.result}</span></td>
       <td><button class="btn btn-danger btn-sm" onclick="deleteRow('${r.id}')">刪</button></td>
     </tr>`).join('');
+
+  // 底部小計列
+  body.innerHTML += `
+    <tr style="border-top:2px solid var(--border2);font-weight:600">
+      <td colspan="6" style="color:var(--muted);font-size:12px">共 ${bets.length} 筆　勝率 ${wr}%　${wins}W/${bets.length-wins}L</td>
+      <td class="mono">${fmtN(totalAmt)}</td>
+      <td class="mono ${totalProfit>=0?'pos':'neg'}">${totalProfit>=0?'+':''}${fmtN(totalProfit)}</td>
+      <td colspan="2"></td>
+    </tr>`;
+}
+
+function clearFilters() {
+  document.getElementById('f-filter-league').value = 'NBA';
+  document.getElementById('f-filter-type').value = '';
+  document.getElementById('f-filter-result').value = '';
+  document.getElementById('f-filter-q').value = '';
+  renderHistory();
 }
 
 async function deleteRow(id) {
@@ -1045,28 +1160,29 @@ async function deleteRow(id) {
 
 async function deleteByDate() {
   const dateVal = document.getElementById('delete-date').value;
-  if (!dateVal) { alert('請先選擇要刪除的日期'); return; }
+  if (!dateVal) { alert('⚠ 請先選擇要刪除的日期'); return; }
 
-  // 轉成 MM-DD 格式（與資料庫存的格式一致）
   const [,m,d] = dateVal.split('-');
   const dateStr = m.padStart(2,'0') + '-' + d.padStart(2,'0');
 
-  const count = allBets.filter(r => r.date === dateStr && r.account === currentAccount).length;
-  if (!count) { alert(`${dateStr} 沒有任何注單資料`); return; }
+  const matched = allBets.filter(r => r.date === dateStr && r.account === currentAccount);
+  if (!matched.length) { alert(`${dateStr} 查無任何注單`); return; }
 
-  if (!confirm(`確認刪除 ${dateStr} 的全部 ${count} 筆注單？此動作無法復原。`)) return;
+  // 顯示詳細資訊讓使用者確認
+  const totalAmt    = matched.reduce((s,r) => s+(+r.amount||0), 0);
+  const totalProfit = matched.reduce((s,r) => s+(+r.profit||0), 0);
+  const wins        = matched.filter(r=>r.result==='贏').length;
+  const msg = `確認刪除以下資料？此動作無法復原！\n\n日期：${dateStr}\n筆數：${matched.length} 筆\n贏：${wins}  輸：${matched.length-wins}\n總金額：${totalAmt.toLocaleString()}\n總輸贏：${totalProfit>=0?'+':''}${totalProfit.toLocaleString()}`;
+  if (!confirm(msg)) return;
 
   if (!sb) { alert('尚未連線 Supabase'); return; }
-  const { error } = await sb.from('bets')
-    .delete()
-    .eq('account', currentAccount)
-    .eq('date', dateStr);
-
+  const { error } = await sb.from('bets').delete().eq('account', currentAccount).eq('date', dateStr);
   if (error) { alert('刪除失敗：' + error.message); return; }
 
   allBets = allBets.filter(r => !(r.date === dateStr && r.account === currentAccount));
   renderHistory();
-  alert(`✓ 已刪除 ${dateStr} 共 ${count} 筆注單`);
+  document.getElementById('delete-date').value = '';
+  alert(`✓ 已刪除 ${dateStr} 共 ${matched.length} 筆注單`);
 }
 
 function clearFilters() {
@@ -1151,73 +1267,112 @@ function clearGrid() {
   excelRows = [];
 }
 
-async function parseGrid() {
+function parseGrid() {
   const raw = document.getElementById('paste-text').value.trim();
   if (!raw) { showAlert('excel-alert', 'err', '請先貼上注單資料'); return; }
 
-  // 日期覆蓋（選填）
   const dateVal = document.getElementById('grid-date').value;
+  if (!dateVal) {
+    showAlert('excel-alert', 'err', '⚠ 請先選擇注單日期再解析');
+    document.getElementById('grid-date').focus();
+    return;
+  }
+
+  // ── 時間防呆：覆蓋日期 D，有效時間範圍為 D-1 12:00:00 ～ D 12:00:00 ──
+  const [yr, mo, dy] = dateVal.split('-').map(Number);
+  const rangeEnd   = new Date(yr, mo-1, dy, 12, 0, 0);       // 當天 12:00
+  const rangeStart = new Date(yr, mo-1, dy-1, 12, 0, 0);     // 前一天 12:00
+
+  // 先掃描所有日期時間行，找出範圍外的
+  const outOfRange = [];
+  const allLines = raw.split('\n').map(l => l.trim());
+  for (const line of allLines) {
+    if (!line.match(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/)) continue;
+    const dt = new Date(line.replace(' ', 'T'));
+    if (dt < rangeStart || dt > rangeEnd) {
+      outOfRange.push(line);
+    }
+  }
+
+  if (outOfRange.length) {
+    const rangeStr = `${rangeStart.getMonth()+1}/${rangeStart.getDate()} 12:00 ～ ${rangeEnd.getMonth()+1}/${rangeEnd.getDate()} 12:00`;
+    showAlert('excel-alert', 'err',
+      `⚠ 有 ${outOfRange.length} 筆時間不在覆蓋日期範圍內（${rangeStr}）：${outOfRange[0]}${outOfRange.length>1?' 等':''}`
+    );
+    return;
+  }
+
   let forceDate = '';
   if (dateVal) {
     const [,m,d] = dateVal.split('-');
     forceDate = m.padStart(2,'0') + '-' + d.padStart(2,'0');
   }
 
-  // 切分成每筆注單（每8行一筆）
-  const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
+  // 以「日期時間行」為分隔切出每筆注單
+  const blocks = [];
+  let cur = [];
+  for (const line of allLines) {
+    if (line.match(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/)) {
+      if (cur.length) blocks.push(cur);
+      cur = [line];
+    } else if (line) {
+      cur.push(line);
+    }
+  }
+  if (cur.length) blocks.push(cur);
+
   excelRows = [];
+  for (const block of blocks) {
+    // block[0] = 日期時間
+    // block[1] = 球種 單號
+    // block[2] = 聯賽 [類型] [球賽代碼]
+    // block[3] = 主隊 比分 讓分 客隊 比分
+    // block[4] = 下注隊伍 @ 賠率
+    // block[5] = 金額
+    // block[6] = 有效下注（略）
+    // block[7] = 輸贏金額
+    if (block.length < 7) continue;
 
-  let i = 0;
-  while (i < lines.length) {
-    // 行1：日期時間  2026-03-28 11:49:28
-    const L1 = lines[i] || '';
-    if (!L1.match(/\d{4}-\d{2}-\d{2}/)) { i++; continue; }
-
-    const L2 = lines[i+1] || ''; // 球種 單號
-    const L3 = lines[i+2] || ''; // 聯賽 [類型] [球賽代碼]
-    const L4 = lines[i+3] || ''; // 主隊 比分 讓分 客隊 比分
-    const L5 = lines[i+4] || ''; // 下注隊伍 @ 賠率
-    const L6 = lines[i+5] || ''; // 金額
-    // L7 有效下注略過
-    const L8 = lines[i+7] || ''; // 輸贏金額
+    const L1 = block[0]; // 日期時間
+    const L2 = block[1] || ''; // 球種
+    const L3 = block[2] || ''; // 聯賽類型
+    const L4 = block[3] || ''; // 賽事
+    const L5 = block[4] || ''; // 下注隊伍@賠率
+    const L6 = block[5] || ''; // 金額
+    const L8 = block[7] || block[6] || ''; // 輸贏
 
     // 日期
     let date = forceDate;
     if (!date) {
-      const dm = L1.match(/(\d{2})-(\d{2}) /);
+      const dm = L1.match(/\d{4}-(\d{2})-(\d{2})/);
       if (dm) date = dm[1] + '-' + dm[2];
     }
 
-    // 類型（從 L3）
+    // 類型
     let type = '初盤';
     if (L2.includes('走地')) type = '走地';
     else if (L3.includes('下半場')) type = '下半場';
-    else if (L3.includes('全場')) type = '初盤';
 
-    // 聯賽（從 L3）
+    // 聯賽
     let league = '其他';
     if (L3.includes('NBA') || L3.includes('美國職業籃球')) league = 'NBA';
     else if (L3.includes('PLG') || L3.includes('台灣職業籃球')) league = 'PLG';
     else if (L3.includes('台灣職業籃球大聯盟')) league = 'T1';
     else if (L3.includes('MLB') || L3.includes('美國職業棒球')) league = 'MLB';
 
-    // 賽事（從 L4）：主隊[主] 比分 讓分 客隊 比分  或  主隊 比分 讓分 客隊[主] 比分
+    // 賽事名稱（從 L4 取兩隊）
     let matchName = '';
-    // 主場隊伍有[主]標記
-    const homeM = L4.match(/^([A-Z]+\s[\u4e00-\u9fff\w]+)\[主\]/);
-    const awayM = L4.match(/([A-Z]+\s[\u4e00-\u9fff\w]+)\[主\]\s*\d+/);
-    // 解析兩隊
-    const teamM = L4.match(/^([A-Z]+\s[\u4e00-\u9fff\w]+(?:\[主\])?)\s+[\d.]+\s+[\d+\-平.]+\s+([A-Z]+\s[\u4e00-\u9fff\w]+(?:\[主\])?)/);
-    if (teamM) {
-      const t1 = teamM[1].replace('[主]','').trim();
-      const t2 = teamM[2].replace('[主]','').trim();
-      matchName = t1 + ' vs ' + t2;
+    const tmM = L4.match(/^([A-Z]+\s[\u4e00-\u9fff\w]+(?:\[主\])?)\s+[\d.]+\s+[\d.+\-平VSvs]+\s+([A-Z]+\s[\u4e00-\u9fff\w]+(?:\[主\])?)/);
+    if (tmM) {
+      matchName = tmM[1].replace('[主]','').trim() + ' vs ' + tmM[2].replace('[主]','').trim();
+    } else {
+      // 大小盤格式：無讓分數字
+      const tmM2 = L4.match(/^([A-Z]+\s[\u4e00-\u9fff\w]+(?:\[主\])?)\s+\d+\s+VS\s+([A-Z]+\s[\u4e00-\u9fff\w]+(?:\[主\])?)/i);
+      if (tmM2) matchName = tmM2[1].replace('[主]','').trim() + ' vs ' + tmM2[2].replace('[主]','').trim();
     }
 
-    // 下注隊伍 & 賠率（從 L5）
-    // 格式：LAL 湖人 @ 0.93  或  240平 大 @ 0.94
-    let betTeam = '';
-    let odds = 0;
+    // 下注隊伍 & 賠率
+    let betTeam = '', odds = 0;
     const oddsM = L5.match(/^(.*?)\s*@\s*([\d.]+)\s*$/);
     if (oddsM) {
       betTeam = oddsM[1].trim();
@@ -1225,595 +1380,146 @@ async function parseGrid() {
       if (odds > 1.5) odds = +(odds/100).toFixed(4);
     }
 
-    // 金額（L6）
+    // 金額
     const amount = parseFloat(L6.replace(/[,，\s]/g,'')) || 0;
-    if (!amount) { i += 8; continue; }
+    if (!amount) continue;
 
-    // 輸贏金額（L8）
+    // 輸贏金額
     const profit = parseFloat(L8.replace(/[,，\s]/g,'')) || 0;
-
-    // 結果：profit > 0 贏，< 0 輸，= 0 待定
-    const result = profit > 0 ? '贏' : '輸';
+    const result = profit >= 0 ? '贏' : '輸';
 
     excelRows.push({ date, type, league, match_name: matchName, bet_team: betTeam, odds, amount, valid: amount, profit, result, account: currentAccount });
-    i += 8;
   }
 
-  if (!excelRows.length) { showAlert('excel-alert', 'err', '解析失敗，請確認格式是否正確（每筆 8 行）'); return; }
+  if (!excelRows.length) { showAlert('excel-alert', 'err', '解析失敗，請確認格式'); return; }
 
-  document.getElementById('excel-count').textContent = `解析完成，共 ${excelRows.length} 筆`;
-  document.getElementById('excel-tbody').innerHTML = excelRows.map(r => `
-    <tr>
-      <td>${r.date}</td>
-      <td><span class="badge ${r.type==='下半場'?'badge-half':r.type==='走地'?'badge-live':'badge-full'}">${r.type}</span></td>
-      <td>${r.league}</td>
-      <td style="font-size:12px;max-width:160px">${r.match_name}</td>
-      <td>${r.bet_team}</td>
-      <td class="mono">${r.odds}</td>
-      <td class="mono">${fmtN(r.amount)}</td>
-      <td class="mono ${r.profit>=0?'pos':'neg'}">${r.profit>=0?'+':''}${fmtN(r.profit)}</td>
-      <td><span class="badge ${r.result==='贏'?'badge-win':'badge-lose'}">${r.result}</span></td>
-    </tr>`).join('');
-  document.getElementById('excel-preview').style.display = 'block';
-
-  if (!sb) { showAlert('excel-alert', 'err', '尚未連線 Supabase，資料僅預覽'); return; }
-  const { error } = await sb.from('bets').insert(excelRows);
-  if (error) { showAlert('excel-alert', 'err', '儲存失敗：' + error.message); return; }
-  excelRows.forEach(r => allBets.push(r));
-  showAlert('excel-alert', 'ok', `✓ 已成功存入 ${excelRows.length} 筆`);
-  clearGrid();
-}
-
-function handleExcelPaste(e) {}
-function parseExcel() {}
-function clearExcel() { clearGrid(); }
-function cancelExcel() { document.getElementById('excel-preview').style.display = 'none'; }
-async function saveExcel() {}
-function handleGridPaste() {}
-function getGridData() { return []; }
-
-const COL_BG = [
-  'var(--s2)','var(--s2)','var(--s2)','var(--s2)', // A B C D
-  'rgba(99,102,241,0.06)','rgba(99,102,241,0.06)',  // E F ★
-  'var(--s2)',                                        // G
-  'rgba(99,102,241,0.06)','rgba(99,102,241,0.06)',  // H I ★
-  'var(--s2)','var(--s2)','var(--s2)','var(--s2)', // J K L M
-];
-
-function setGridToday() {
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('grid-date').value = today;
-  updateDateBadge();
-}
-
-function updateDateBadge() {
-  const val = document.getElementById('grid-date').value;
-  const badge = document.getElementById('grid-date-badge');
-  if (val) {
-    const [,m,d] = val.split('-');
-    badge.textContent = m + '月' + d + '日';
-    badge.style.display = 'inline-block';
-  } else {
-    badge.style.display = 'none';
-  }
-}
-
-function initGrid() {
-  const tbody = document.getElementById('grid-body');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-  for (let r = 0; r < GRID_ROWS; r++) {
-    const tr = document.createElement('tr');
-    for (let c = 0; c < GRID_COLS; c++) {
-      const td = document.createElement('td');
-      td.contentEditable = 'true';
-      const wide = (c === 4) ? '240px' : (c === 1) ? '100px' : '72px';
-      td.style.cssText = `padding:5px 8px;border:1px solid var(--border2);min-width:${wide};height:30px;vertical-align:middle;outline:none;font-family:var(--fm);font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;background:${COL_BG[c]};`;
-      td.addEventListener('focus', () => td.style.boxShadow = '0 0 0 2px var(--accent)');
-      td.addEventListener('blur',  () => td.style.boxShadow = 'none');
-      tr.appendChild(td);
-    }
-    tbody.appendChild(tr);
-  }
-  tbody.addEventListener('paste', handleGridPaste);
-  setGridToday();
-}
-
-function handleGridPaste(e) {
-  e.preventDefault();
-  const text = e.clipboardData.getData('text/plain');
-  if (!text) return;
-  const lines = text.split('\n').map(l => l.trimEnd()).filter(l => l);
-  const target = e.target.closest('td');
-  if (!target) return;
-  const allCells = Array.from(document.getElementById('grid-body').rows).map(r => Array.from(r.cells));
-  let sr = 0, sc = 0;
-  outer: for (let r = 0; r < allCells.length; r++)
-    for (let c = 0; c < allCells[r].length; c++)
-      if (allCells[r][c] === target) { sr = r; sc = c; break outer; }
-  lines.forEach((line, ri) =>
-    line.split('\t').forEach((val, ci) => {
-      const r = sr+ri, c = sc+ci;
-      if (r < allCells.length && c < allCells[r].length)
-        allCells[r][c].textContent = val.trim();
-    })
-  );
-}
-
-function getGridData() {
-  const rows = [];
-  for (const tr of document.getElementById('grid-body').rows) {
-    const cells = Array.from(tr.cells).map(td => td.textContent.trim());
-    if (cells.every(c => !c)) continue;
-    rows.push(cells);
-  }
-  return rows;
-}
-
-function clearGrid() {
-  for (const tr of document.getElementById('grid-body').rows)
-    for (const td of tr.cells) td.textContent = '';
-  document.getElementById('excel-preview').style.display = 'none';
-  excelRows = [];
-}
-
-async function parseGrid() {
-  const rawRows = getGridData();
-  if (!rawRows.length) { showAlert('excel-alert', 'err', '表格是空的，請先貼上資料'); return; }
-
-  // 日期從選擇器取
-  const dateVal = document.getElementById('grid-date').value;
-  let globalDate = '';
-  if (dateVal) {
-    const [,m,d] = dateVal.split('-');
-    globalDate = m.padStart(2,'0') + '-' + d.padStart(2,'0');
-  }
-
-  // ── 把每兩行合併成一筆 ──
-  // 規則：第一行有單號（B欄）→ 正式資料行
-  //       下一行 B欄為空 → 同一筆的第二行（內容下半段）
-  const merged = [];
-  let i = 0;
-  while (i < rawRows.length) {
-    const row = rawRows[i];
-    const a = row[0] || '';
-
-    // 跳過標題列
-    if (['時間','日期','A'].includes(a) || row[1] === '單號') { i++; continue; }
-
-    // 下一行 B欄是空的 → 合併
-    const next = rawRows[i+1];
-    if (next && !(next[1] || '').trim()) {
-      // 合併 E 欄（內容）：第一行 + 換行 + 第二行
-      const mergedRow = [...row];
-      mergedRow[4] = (row[4] || '') + '\n' + (next[4] || '');
-      merged.push(mergedRow);
-      i += 2;
+  // ── 合併相同注單（日期+類型+賽事+下注隊伍+賠率 全部相同 → 金額/輸贏相加）──
+  const mergeMap = new Map();
+  for (const r of excelRows) {
+    const key = [r.date, r.type, r.match_name, r.bet_team, r.odds].join('|');
+    if (mergeMap.has(key)) {
+      const existing = mergeMap.get(key);
+      existing.amount  = Math.round(existing.amount  + r.amount);
+      existing.valid   = Math.round(existing.valid   + r.valid);
+      existing.profit  = Math.round((existing.profit + r.profit) * 100) / 100;
+      existing._count  = (existing._count || 1) + 1;
     } else {
-      merged.push(row);
-      i++;
+      mergeMap.set(key, { ...r, _count: 1 });
     }
   }
+  excelRows = Array.from(mergeMap.values());
+  const mergedCount = excelRows.filter(r => r._count > 1).length;
 
-  excelRows = [];
-  for (const cols of merged) {
-    const content = (cols[4] || '').trim();
-    if (!content || content.length < 5) continue;
-
-    // 日期
-    let date = globalDate;
-    if (!date) {
-      const a = cols[0] || '';
-      const dm = a.match(/(\d{1,2})[月\/\-](\d{1,2})/);
-      if (dm) date = dm[1].padStart(2,'0') + '-' + dm[2].padStart(2,'0');
-    }
-
-    // 類型（第二行含「下半場」等）
-    let type = '初盤';
-    if (content.includes('下半場')) type = '下半場';
-    else if (content.includes('走地')) type = '走地';
-
-    // 聯賽
-    let league = '其他';
-    if (content.includes('NBA') || content.includes('美國職業籃球')) league = 'NBA';
-    else if (content.includes('PLG') || content.includes('台灣職業籃球')) league = 'PLG';
-    else if (content.includes('MLB') || content.includes('美國職業棒球')) league = 'MLB';
-
-    // 主隊：第一行 ] 後到 數字[主] 前
-    let matchName = '';
-    const homeM = content.match(/\]([^\d\[\]\n]+?)\s+\d+\[主\]/);
-    const awayM = content.match(/\[主\][\d.]+([A-Z]{2,4}\s[\u4e00-\u9fff]+)/);
-    if (homeM) {
-      const home = homeM[1].trim();
-      const away = awayM ? awayM[1].trim() : '';
-      matchName = home + (away ? ' vs ' + away : '');
-    }
-
-    // 下注隊伍：第二行 )- 後到 < 前
-    let betTeam = '';
-    const btM = content.match(/\)-([^<＜\n@＠]+)[<＜]/);
-    if (btM) betTeam = btM[1].trim();
-
-    // 賠率：@ 後的數字
-    let odds = 0;
-    const oddsM = content.match(/[@＠]\s*([\d.]+)/);
-    if (oddsM) {
-      odds = parseFloat(oddsM[1]);
-      if (odds > 1.5) odds = +(odds / 100).toFixed(4);
-    }
-
-    // F欄（index 5）：金額
-    const amount = parseFloat((cols[5] || '').replace(/[,，\s]/g,'')) || 0;
-    if (!amount) continue;
-
-    // H欄（index 7）：輸贏金額
-    const profit = parseFloat((cols[7] || '').replace(/[,，\s]/g,'')) || 0;
-
-    // I欄（index 8）：結果
-    const result = (cols[8] || '').includes('贏') || (cols[8] || '') === '正常' ? '贏' : '輸';
-
-    excelRows.push({ date, type, league, match_name: matchName, bet_team: betTeam, odds, amount, valid: amount, profit, result, account: currentAccount });
-  }
-
-  if (!excelRows.length) { showAlert('excel-alert', 'err', '解析失敗，請確認格式是否正確'); return; }
-
-  document.getElementById('excel-count').textContent = `解析完成，共 ${excelRows.length} 筆（日期：${globalDate || '未設定'}）`;
-  document.getElementById('excel-tbody').innerHTML = excelRows.map(r => `
-    <tr>
-      <td>${r.date}</td>
-      <td><span class="badge ${r.type==='下半場'?'badge-half':r.type==='走地'?'badge-live':'badge-full'}">${r.type}</span></td>
-      <td>${r.league}</td>
-      <td style="font-size:12px;max-width:160px">${r.match_name}</td>
-      <td>${r.bet_team}</td>
-      <td class="mono">${r.odds}</td>
-      <td class="mono">${fmtN(r.amount)}</td>
-      <td class="mono ${r.profit>=0?'pos':'neg'}">${r.profit>=0?'+':''}${fmtN(r.profit)}</td>
-      <td><span class="badge ${r.result==='贏'?'badge-win':'badge-lose'}">${r.result}</span></td>
-    </tr>`).join('');
-  document.getElementById('excel-preview').style.display = 'block';
-
-  if (!sb) { showAlert('excel-alert', 'err', '尚未連線 Supabase，資料僅預覽'); return; }
-  const { error } = await sb.from('bets').insert(excelRows);
-  if (error) { showAlert('excel-alert', 'err', '儲存失敗：' + error.message); return; }
-  excelRows.forEach(r => allBets.push(r));
-  showAlert('excel-alert', 'ok', `✓ 已成功存入 ${excelRows.length} 筆`);
-  clearGrid();
-}
-
-function handleExcelPaste(e) {}
-function parseExcel() {}
-function clearExcel() { clearGrid(); }
-function cancelExcel() { document.getElementById('excel-preview').style.display = 'none'; }
-async function saveExcel() {}
-
-function setGridToday() {
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('grid-date').value = today;
-  updateDateBadge(today);
-}
-
-function updateDateBadge(val) {
-  const badge = document.getElementById('grid-date-badge');
-  if (val) {
-    const d = new Date(val);
-    const mm = String(d.getMonth()+1).padStart(2,'0');
-    const dd = String(d.getDate()).padStart(2,'0');
-    badge.textContent = mm + '-' + dd;
-    badge.style.display = 'block';
-  } else {
-    badge.style.display = 'none';
-  }
-}
-
-function initGrid() {
-  const dateEl = document.getElementById('grid-date');
-  if (dateEl) {
-    dateEl.value = new Date().toISOString().split('T')[0];
-    updateDateBadge(dateEl.value);
-    dateEl.addEventListener('change', () => updateDateBadge(dateEl.value));
-  }
-
-  const tbody = document.getElementById('grid-body');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-  for (let r = 0; r < GRID_ROWS; r++) {
-    const tr = document.createElement('tr');
-    for (let c = 0; c < GRID_COLS; c++) {
-      const td = document.createElement('td');
-      td.contentEditable = 'true';
-      // c0=D(略), c1=E(內容★), c2=F(金額★), c3=G(略), c4=H(賠率★), c5=I(結果★), c6=J+(略)
-      const isKey = [1,2,4,5].includes(c);
-      td.style.cssText = `padding:6px 8px;border:1px solid var(--border2);min-width:${c===1?'240px':'80px'};max-width:${c===1?'320px':'140px'};height:32px;vertical-align:middle;outline:none;font-family:var(--fm);font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;background:${isKey?'rgba(99,102,241,0.05)':'var(--s2)'};`;
-      td.addEventListener('focus', () => td.style.boxShadow = '0 0 0 2px var(--accent)');
-      td.addEventListener('blur', () => td.style.boxShadow = 'none');
-      tr.appendChild(td);
-    }
-    tbody.appendChild(tr);
-  }
-  tbody.addEventListener('paste', handleGridPaste);
-}
-
-function handleGridPaste(e) {
-  e.preventDefault();
-  const text = e.clipboardData.getData('text/plain');
-  if (!text) return;
-
-  const lines = text.split('\n').map(l => l.trimEnd()).filter(l => l);
-  const target = e.target.closest('td');
-  if (!target) return;
-
-  const tbody = document.getElementById('grid-body');
-  const allRows = Array.from(tbody.rows);
-  const allCells = allRows.map(r => Array.from(r.cells));
-
-  let startRow = 0, startCol = 0;
-  for (let r = 0; r < allCells.length; r++) {
-    for (let c = 0; c < allCells[r].length; c++) {
-      if (allCells[r][c] === target) { startRow = r; startCol = c; break; }
-    }
-  }
-
-  lines.forEach((line, ri) => {
-    const cols = line.split('\t');
-    cols.forEach((val, ci) => {
-      const r = startRow + ri;
-      const c = startCol + ci;
-      if (r < allCells.length && c < allCells[r].length) {
-        allCells[r][c].textContent = val.trim();
-      }
-    });
-  });
-}
-
-function getGridData() {
-  const tbody = document.getElementById('grid-body');
-  const rows = [];
-  for (const tr of tbody.rows) {
-    const cells = Array.from(tr.cells).map(td => td.textContent.trim());
-    if (cells.every(c => !c)) continue;
-    rows.push(cells);
-  }
-  return rows;
-}
-
-function clearGrid() {
-  const tbody = document.getElementById('grid-body');
-  for (const tr of tbody.rows) {
-    for (const td of tr.cells) td.textContent = '';
-  }
-  document.getElementById('excel-preview').style.display = 'none';
-  excelRows = [];
-}
-
-async function parseGrid() {
-  const rawRows = getGridData();
-  if (!rawRows.length) { showAlert('excel-alert', 'err', '表格是空的，請先貼上資料'); return; }
-
-  // 取日期
-  const dateVal = document.getElementById('grid-date').value;
-  if (!dateVal) { showAlert('excel-alert', 'err', '請先選擇注單日期'); return; }
-  const d = new Date(dateVal);
-  const date = String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-
-  excelRows = [];
-  for (const cols of rawRows) {
-    // 欄位對應：c0=D(球賽種類), c1=E(內容), c2=F(金額), c3=G(有效), c4=H(賠率), c5=I(結果), c6=J+
-    const content = (cols[1] || '').trim(); // E欄
-    if (!content || content.length < 5) continue;
-    // 跳過標題列
-    if (content === '內容' || content === 'E 內容') continue;
-
-    // ── 類型 ──
-    let type = '初盤';
-    if (content.includes('下半場')) type = '下半場';
-    else if (content.includes('走地')) type = '走地';
-
-    // ── 聯賽 ──
-    let league = '其他';
-    if (content.includes('NBA') || content.includes('美國職業籃球')) league = 'NBA';
-    else if (content.includes('PLG') || content.includes('台灣職業籃球')) league = 'PLG';
-    else if (content.includes('MLB') || content.includes('美國職業棒球')) league = 'MLB';
-
-    // ── 主隊：] 後到 數字[主] 前 ──
-    let matchName = '';
-    const homeM = content.match(/\]([^\]\d]+?)\s+\d+\[主\]/);
-    // ── 客隊：讓分後的英文+中文 ──
-    const awayM = content.match(/\[主\][\d.]+([A-Z]+\s[\u4e00-\u9fff\w]+)/);
-    if (homeM) {
-      const home = homeM[1].trim();
-      const away = awayM ? awayM[1].trim() : '';
-      matchName = home + (away ? ' vs ' + away : '');
-    }
-
-    // ── 下注隊伍：)- 後到 < 前 ──
-    let betTeam = '';
-    const btM = content.match(/\)-([^<＜\n@＠]+)[<＜]/);
-    if (btM) betTeam = btM[1].trim();
-
-    // ── 賠率：@ 後數字，優先從內容取 ──
-    let odds = 0;
-    const oddsM = content.match(/[@＠]\s*([\d.]+)/);
-    if (oddsM) {
-      odds = parseFloat(oddsM[1]);
-    } else {
-      odds = parseFloat((cols[4] || '').replace(/[%％,，\s]/g,'')) || 0;
-      if (odds > 1.5) odds = +(odds / 100).toFixed(4);
-    }
-
-    // ── 金額：F欄（c2）──
-    const amount = parseFloat((cols[2] || '').replace(/[,，\s]/g,'')) || 0;
-    if (!amount) continue;
-
-    // ── 結果：I欄（c5）──
-    const resultRaw = cols[5] || '';
-    const result = resultRaw.includes('贏') ? '贏' : '輸';
-
-    const profit = result === '贏' ? Math.round(amount * odds) : -Math.round(amount);
-
-    excelRows.push({ date, type, league, match_name: matchName, bet_team: betTeam, odds, amount, valid: amount, profit, result, account: currentAccount });
-  }
-
-  if (!excelRows.length) { showAlert('excel-alert', 'err', '解析失敗，請確認 E/F/I 欄有資料'); return; }
-
-  document.getElementById('excel-count').textContent = `解析完成，共 ${excelRows.length} 筆（日期：${date}）`;
-  document.getElementById('excel-tbody').innerHTML = excelRows.map(r => `
-    <tr>
-      <td>${r.date}</td>
-      <td><span class="badge ${r.type==='下半場'?'badge-half':r.type==='走地'?'badge-live':'badge-full'}">${r.type}</span></td>
-      <td>${r.league}</td>
-      <td style="font-size:12px;max-width:160px">${r.match_name}</td>
-      <td>${r.bet_team}</td>
-      <td class="mono">${r.odds}</td>
-      <td class="mono">${fmtN(r.amount)}</td>
-      <td class="mono ${r.profit>=0?'pos':'neg'}">${r.profit>=0?'+':''}${fmtN(r.profit)}</td>
-      <td><span class="badge ${r.result==='贏'?'badge-win':'badge-lose'}">${r.result}</span></td>
-    </tr>`).join('');
-  document.getElementById('excel-preview').style.display = 'block';
-
-  if (!sb) { showAlert('excel-alert', 'err', '尚未連線 Supabase，資料僅預覽'); return; }
-  const { error } = await sb.from('bets').insert(excelRows);
-  if (error) { showAlert('excel-alert', 'err', '儲存失敗：' + error.message); return; }
-  excelRows.forEach(r => allBets.push(r));
-  showAlert('excel-alert', 'ok', `✓ 已成功存入 ${excelRows.length} 筆（${date}）`);
-  clearGrid();
-}
-
-function handleExcelPaste(e) {}
-function parseExcel() {}
-function clearExcel() { clearGrid(); }
-function cancelExcel() { document.getElementById('excel-preview').style.display = 'none'; }
-async function saveExcel() {}
-
-function parseExcelContent(raw) {
-  const lines = raw.split('\n').map(l => l.trimEnd()).filter(l => l.trim());
-  const rows = [];
-  for (const line of lines) {
-    const cols = line.split('\t');
-    if (cols.length < 5) continue;
-
-    // 跳過標題列
-    const firstCell = (cols[0] || '').trim();
-    if (firstCell === '時間' || firstCell === '日期' || firstCell === '單號') continue;
-
-    // 跳過小計列（第一欄是空的且有合計數字）
-    if (!firstCell && cols.filter(c => c.trim()).length <= 4) continue;
-
-    // 解析時間欄取日期 (cols[0])
-    let date = '';
-    const timeStr = (cols[0] || '').trim();
-    const dateMatch = timeStr.match(/(\d{1,2})月(\d{1,2})日/) || timeStr.match(/(\d{1,2})[\/\-](\d{1,2})/);
-    if (dateMatch) {
-      date = String(dateMatch[1]).padStart(2,'0') + '-' + String(dateMatch[2]).padStart(2,'0');
-    }
-
-    // E欄 = cols[4]：內容，解析賽事資訊
-    const content = (cols[4] || '').trim();
-    if (!content) continue;
-
-    // 判斷類型：下半場/走地/初盤
-    let type = '初盤';
-    if (content.includes('下半場')) type = '下半場';
-    else if (content.includes('走地')) type = '走地';
-
-    // 解析聯賽
-    let league = '其他';
-    if (content.includes('NBA') || content.includes('美國職業籃球')) league = 'NBA';
-    else if (content.includes('PLG') || content.includes('台灣職業籃球')) league = 'PLG';
-    else if (content.includes('MLB')) league = 'MLB';
-
-    // 解析賽事名稱：取括號內的賽事對戰
-    let matchName = '';
-    const vsMatch = content.match(/([^\[]+?)\s+(?:\d+[-–]\d+\s*)?(?:vs\.?|VS)\s*([^\s\[（(]+)/);
-    if (vsMatch) {
-      matchName = vsMatch[1].trim() + ' vs ' + vsMatch[2].trim();
-    }
-
-    // 解析下注隊伍：)-後面到@前面
-    let betTeam = '';
-    const betMatch = content.match(/\)-([^@＠\s]+(?:\s[^@＠\s]+)*)\s*[@＠]/);
-    if (betMatch) betTeam = betMatch[1].trim();
-    // 備用：＜...＞或《...》
-    if (!betTeam) {
-      const bracketMatch = content.match(/[＜<《]([^＞>》]+)[＞>》]/);
-      if (bracketMatch) betTeam = bracketMatch[1].trim();
-    }
-
-    // F欄 = cols[5]：金額
-    const amount = parseFloat((cols[5] || '').replace(/[,，]/g,'')) || 0;
-
-    // H欄 = cols[7]：賠率（可能是 95% 或 0.95）
-    let odds = 0;
-    const oddsStr = (cols[7] || '').trim().replace(/[,，%％]/g,'');
-    odds = parseFloat(oddsStr) || 0;
-    if (odds > 1.5) odds = odds / 100; // 95 → 0.95
-
-    // I欄 = cols[8]：結果
-    const resultRaw = (cols[8] || '').trim();
-    const result = resultRaw.includes('贏') ? '贏' : '輸';
-
-    // 自動計算輸贏金額
-    const profit = result === '贏' ? Math.round(amount * odds) : -Math.round(amount);
-
-    if (!amount) continue;
-
-    rows.push({ date, type, league, match_name: matchName, bet_team: betTeam, odds, amount, valid: amount, profit, result, account: currentAccount });
-  }
-  return rows;
-}
-
-function parseExcel() {
-  const raw = document.getElementById('excel-paste-area').textContent.trim();
-  if (!raw || raw === '在此貼上 Excel 資料（點擊後按 Ctrl+V）') {
-    showAlert('excel-alert', 'err', '請先貼上 Excel 資料');
-    return;
-  }
-  excelRows = parseExcelContent(raw);
-  if (!excelRows.length) { showAlert('excel-alert', 'err', '無法解析，請確認格式是否正確'); return; }
-
-  document.getElementById('excel-count').textContent = `解析完成，共 ${excelRows.length} 筆，請確認後存入`;
+  // 顯示預覽
+  const totalOrig = Array.from(mergeMap.values()).reduce((s,r) => s + r._count, 0);
+  const hint = mergedCount > 0 ? `（已合併 ${mergedCount} 組重複注單）` : '';
+  document.getElementById('excel-count').textContent = `解析完成，共 ${excelRows.length} 筆 ${hint}，請確認後存入`;
   document.getElementById('excel-tbody').innerHTML = excelRows.map((r,i) => `
-    <tr>
+    <tr id="erow-${i}">
+      <td><input type="checkbox" class="row-chk" data-i="${i}" style="cursor:pointer"></td>
       <td>${r.date}</td>
       <td><span class="badge ${r.type==='下半場'?'badge-half':r.type==='走地'?'badge-live':'badge-full'}">${r.type}</span></td>
       <td>${r.league}</td>
-      <td style="font-size:12px;max-width:160px">${r.match_name}</td>
+      <td style="font-size:12px;max-width:180px">${r.match_name}</td>
       <td>${r.bet_team}</td>
       <td class="mono">${r.odds}</td>
-      <td class="mono">${fmtN(r.amount)}</td>
+      <td class="mono">${fmtN(r.amount)}${r._count>1?` <span style="font-size:10px;color:var(--accent-h);background:rgba(99,102,241,.15);padding:1px 6px;border-radius:99px">×${r._count}</span>`:''}</td>
       <td class="mono ${r.profit>=0?'pos':'neg'}">${r.profit>=0?'+':''}${fmtN(r.profit)}</td>
       <td><span class="badge ${r.result==='贏'?'badge-win':'badge-lose'}">${r.result}</span></td>
       <td><button class="btn btn-danger btn-sm" onclick="removeExcelRow(${i})">✕</button></td>
     </tr>`).join('');
   document.getElementById('excel-preview').style.display = 'block';
+  document.getElementById('excel-preview').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function selectAllRows() {
+  document.querySelectorAll('.row-chk').forEach(c => c.checked = true);
+  const chkAll = document.getElementById('chk-all');
+  if (chkAll) chkAll.checked = true;
+}
+
+function toggleAllRows(checked) {
+  document.querySelectorAll('.row-chk').forEach(c => c.checked = checked);
+}
+
+function mergeSelected() {
+  const selected = Array.from(document.querySelectorAll('.row-chk:checked')).map(c => parseInt(c.dataset.i));
+  if (selected.length < 2) { alert('請至少勾選 2 筆才能合併'); return; }
+
+  const toMerge = selected.map(i => excelRows[i]);
+
+  // 確認是否賽事+下注隊伍+賠率一致
+  const first = toMerge[0];
+  const allSame = toMerge.every(r => r.match_name === first.match_name && r.bet_team === first.bet_team && r.odds === first.odds);
+  if (!allSame) {
+    if (!confirm('選取的注單賽事/隊伍/賠率不完全相同，仍要合併嗎？')) return;
+  }
+
+  // 合併成第一筆，累加金額和輸贏
+  const merged = { ...first };
+  for (let k = 1; k < toMerge.length; k++) {
+    merged.amount  = Math.round(merged.amount  + toMerge[k].amount);
+    merged.valid   = Math.round(merged.valid   + toMerge[k].valid);
+    merged.profit  = Math.round((merged.profit + toMerge[k].profit) * 100) / 100;
+    merged._count  = (merged._count || 1) + (toMerge[k]._count || 1);
+  }
+  merged.result = merged.profit >= 0 ? '贏' : '輸';
+
+  // 移除被合併的列，插入合併後的列（放在第一筆位置）
+  const firstIdx = selected[0];
+  const newRows = excelRows.filter((_, i) => !selected.includes(i));
+  newRows.splice(firstIdx, 0, merged);
+  excelRows = newRows;
+
+  renderExcelPreview();
+}
+
+function renderExcelPreview() {
+  const mergedCount = excelRows.filter(r => (r._count||1) > 1).length;
+  const hint = mergedCount > 0 ? `（已合併 ${mergedCount} 組）` : '';
+  document.getElementById('excel-count').textContent = `共 ${excelRows.length} 筆 ${hint}，請確認後存入`;
+  document.getElementById('excel-tbody').innerHTML = excelRows.map((r,i) => `
+    <tr id="erow-${i}">
+      <td><input type="checkbox" class="row-chk" data-i="${i}" style="cursor:pointer"></td>
+      <td>${r.date}</td>
+      <td><span class="badge ${r.type==='下半場'?'badge-half':r.type==='走地'?'badge-live':'badge-full'}">${r.type}</span></td>
+      <td>${r.league}</td>
+      <td style="font-size:12px;max-width:180px">${r.match_name}</td>
+      <td>${r.bet_team}</td>
+      <td class="mono">${r.odds}</td>
+      <td class="mono">${fmtN(r.amount)}${(r._count||1)>1?` <span style="font-size:10px;color:var(--accent-h);background:rgba(99,102,241,.15);padding:1px 6px;border-radius:99px">×${r._count}</span>`:''}</td>
+      <td class="mono ${r.profit>=0?'pos':'neg'}">${r.profit>=0?'+':''}${fmtN(r.profit)}</td>
+      <td><span class="badge ${r.result==='贏'?'badge-win':'badge-lose'}">${r.result}</span></td>
+      <td><button class="btn btn-danger btn-sm" onclick="removeExcelRow(${i})">✕</button></td>
+    </tr>`).join('');
 }
 
 function removeExcelRow(i) {
   excelRows.splice(i, 1);
-  if (!excelRows.length) { cancelExcel(); return; }
-  parseExcel();
+  if (!excelRows.length) { document.getElementById('excel-preview').style.display = 'none'; return; }
+  renderExcelPreview();
 }
 
-function cancelExcel() {
-  excelRows = [];
-  document.getElementById('excel-preview').style.display = 'none';
-}
-
-function clearExcel() {
-  const area = document.getElementById('excel-paste-area');
-  area.textContent = '在此貼上 Excel 資料（點擊後按 Ctrl+V）';
-  area.style.color = 'var(--muted)';
-  cancelExcel();
-}
-
-async function saveExcel() {
+async function saveExcelRows() {
   if (!excelRows.length) return;
   if (!sb) { showAlert('excel-alert', 'err', '尚未連線 Supabase'); return; }
-  const { error } = await sb.from('bets').insert(excelRows);
+  const toInsert = excelRows.map(({ _count, ...r }) => r);
+  const { error } = await sb.from('bets').insert(toInsert);
   if (error) { showAlert('excel-alert', 'err', '儲存失敗：' + error.message); return; }
   excelRows.forEach(r => allBets.push(r));
   showAlert('excel-alert', 'ok', `✓ 已成功存入 ${excelRows.length} 筆`);
-  clearExcel();
+  clearGrid();
 }
+
+function handleExcelPaste(e) {}
+function parseExcel() {}
+function clearExcel() { clearGrid(); }
+function cancelExcel() { document.getElementById('excel-preview').style.display = 'none'; excelRows = []; }
+async function saveExcel() {}
+function handleGridPaste() {}
+function getGridData() { return []; }
+
+
 </script>
 </body>
 </html>
