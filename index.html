@@ -581,6 +581,12 @@ LAL 湖人 @ 0.93
           <option value="MLB">MLB</option>
           <option value="">所有聯賽</option>
         </select>
+        <select id="f-filter-date" onchange="onDateSelectChange()" style="font-family:var(--f);min-width:110px">
+          <option value="">所有日期</option>
+        </select>
+        <input type="date" id="f-filter-date-from" onchange="renderHistory()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none" title="開始日期">
+        <span style="font-size:12px;color:var(--muted)">～</span>
+        <input type="date" id="f-filter-date-to" onchange="renderHistory()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none" title="結束日期">
         <select id="f-filter-type" onchange="renderHistory()" style="font-family:var(--f)">
           <option value="">所有類型</option>
           <option value="下半場">下半場</option>
@@ -626,11 +632,12 @@ let chartRefs = {};
 let pendingRows = [];
 
 /* ── Init ── */
+/* ── 固定 Supabase 設定（分享給所有使用者）── */
+const FIXED_SB_URL = 'https://waqarpffhaqwtemicvun.supabase.co';
+const FIXED_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhcWFycGZmaGFxd3RlbWljdnVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjE3NTIsImV4cCI6MjA5MDE5Nzc1Mn0.92PhGgPIxMlFqvIMSdTjvccySeppouS7EF-6ESGPKcA';
+
 window.onload = async () => {
-  const url = localStorage.getItem('sb_url');
-  const key = localStorage.getItem('sb_key');
-  if (url && key) await init(url, key);
-  else document.getElementById('overlay').style.display = 'flex';
+  await init(FIXED_SB_URL, FIXED_SB_KEY);
 
   const now = new Date();
   document.getElementById('f-date').value = now.toISOString().split('T')[0];
@@ -660,22 +667,19 @@ function copySQL() {
 }
 
 async function connectSupabase() {
-  const url = document.getElementById('sb-url').value.trim();
-  const key = document.getElementById('sb-key').value.trim();
+  const url = document.getElementById('sb-url').value.trim() || FIXED_SB_URL;
+  const key = document.getElementById('sb-key').value.trim() || FIXED_SB_KEY;
   const errEl = document.getElementById('setup-err');
   errEl.style.display = 'none';
-  if (!url || !key) { errEl.textContent = '請填入 URL 和 Key'; errEl.style.display = 'block'; return; }
 
   document.getElementById('btn-connect').disabled = true;
   document.getElementById('btn-connect').textContent = '連線中...';
 
   const ok = await init(url, key);
   if (ok) {
-    localStorage.setItem('sb_url', url);
-    localStorage.setItem('sb_key', key);
     document.getElementById('overlay').style.display = 'none';
   } else {
-    errEl.textContent = '連線失敗，請確認 URL 和 Key 是否正確，以及資料表是否已建立。';
+    errEl.textContent = '連線失敗，請確認資料表是否已建立。';
     errEl.style.display = 'block';
     document.getElementById('btn-connect').disabled = false;
     document.getElementById('btn-connect').textContent = '連線並開始使用';
@@ -683,8 +687,8 @@ async function connectSupabase() {
 }
 
 function showSetup() {
-  document.getElementById('sb-url').value = localStorage.getItem('sb_url') || '';
-  document.getElementById('sb-key').value = localStorage.getItem('sb_key') || '';
+  document.getElementById('sb-url').value = FIXED_SB_URL;
+  document.getElementById('sb-key').value = FIXED_SB_KEY;
   document.getElementById('overlay').style.display = 'flex';
 }
 
@@ -726,6 +730,7 @@ async function loadBets() {
   const { data, error } = await sb.from('bets').select('*').eq('account', currentAccount).order('date').order('time_str');
   if (error) { console.error(error); return; }
   allBets = data || [];
+  populateDateSelect();
 }
 
 /* ── Nav ── */
@@ -1094,20 +1099,63 @@ function buildBarChart(id, bets) {
 }
 
 /* ── History ── */
+function populateDateSelect() {
+  const dates = [...new Set(allBets.map(r => r.date))].sort((a,b) => b.localeCompare(a));
+  const sel = document.getElementById('f-filter-date');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">所有日期</option>' +
+    dates.map(d => {
+      const [m,day] = d.split('-');
+      return `<option value="${d}">${m}/${day}</option>`;
+    }).join('');
+  if (cur) sel.value = cur;
+}
+
+function onDateSelectChange() {
+  const val = document.getElementById('f-filter-date').value;
+  if (val) {
+    // 把日期範圍清掉，用下拉的
+    document.getElementById('f-filter-date-from').value = '';
+    document.getElementById('f-filter-date-to').value = '';
+  }
+  renderHistory();
+}
+
 function renderHistory() {
-  const league = document.getElementById('f-filter-league').value;
-  const type   = document.getElementById('f-filter-type').value;
-  const result = document.getElementById('f-filter-result').value;
-  const q      = document.getElementById('f-filter-q').value.toLowerCase();
+  const league  = document.getElementById('f-filter-league').value;
+  const dateOne = document.getElementById('f-filter-date').value;
+  const dateFrom= document.getElementById('f-filter-date-from').value;
+  const dateTo  = document.getElementById('f-filter-date-to').value;
+  const type    = document.getElementById('f-filter-type').value;
+  const result  = document.getElementById('f-filter-result').value;
+  const q       = document.getElementById('f-filter-q').value.toLowerCase();
 
   let bets = [...allBets];
-  if (league) bets = bets.filter(r => r.league === league);
-  if (type)   bets = bets.filter(r => r.type === type);
-  if (result) bets = bets.filter(r => r.result === result);
-  if (q)      bets = bets.filter(r => (r.match_name||'').toLowerCase().includes(q) || (r.bet_team||'').toLowerCase().includes(q));
+  if (league)   bets = bets.filter(r => r.league === league);
+  if (type)     bets = bets.filter(r => r.type === type);
+  if (result)   bets = bets.filter(r => r.result === result);
+  if (q)        bets = bets.filter(r => (r.match_name||'').toLowerCase().includes(q) || (r.bet_team||'').toLowerCase().includes(q));
+
+  // 日期篩選：下拉優先，否則用範圍
+  if (dateOne) {
+    bets = bets.filter(r => r.date === dateOne);
+  } else {
+    // 把 YYYY-MM-DD 轉成 MM-DD 來比較
+    if (dateFrom) {
+      const [,fm,fd] = dateFrom.split('-');
+      const fromStr = fm + '-' + fd;
+      bets = bets.filter(r => r.date >= fromStr);
+    }
+    if (dateTo) {
+      const [,tm,td] = dateTo.split('-');
+      const toStr = tm + '-' + td;
+      bets = bets.filter(r => r.date <= toStr);
+    }
+  }
+
   bets.sort((a,b) => b.date.localeCompare(a.date));
 
-  // 小計
   const totalAmt    = bets.reduce((s,r) => s + (+r.amount||0), 0);
   const totalProfit = bets.reduce((s,r) => s + (+r.profit||0), 0);
   const wins        = bets.filter(r => r.result === '贏').length;
@@ -1132,7 +1180,6 @@ function renderHistory() {
       <td><button class="btn btn-danger btn-sm" onclick="deleteRow('${r.id}')">刪</button></td>
     </tr>`).join('');
 
-  // 底部小計列
   body.innerHTML += `
     <tr style="border-top:2px solid var(--border2);font-weight:600">
       <td colspan="6" style="color:var(--muted);font-size:12px">共 ${bets.length} 筆　勝率 ${wr}%　${wins}W/${bets.length-wins}L</td>
@@ -1144,6 +1191,9 @@ function renderHistory() {
 
 function clearFilters() {
   document.getElementById('f-filter-league').value = 'NBA';
+  document.getElementById('f-filter-date').value = '';
+  document.getElementById('f-filter-date-from').value = '';
+  document.getElementById('f-filter-date-to').value = '';
   document.getElementById('f-filter-type').value = '';
   document.getElementById('f-filter-result').value = '';
   document.getElementById('f-filter-q').value = '';
@@ -1507,6 +1557,7 @@ async function saveExcelRows() {
   const { error } = await sb.from('bets').insert(toInsert);
   if (error) { showAlert('excel-alert', 'err', '儲存失敗：' + error.message); return; }
   excelRows.forEach(r => allBets.push(r));
+  populateDateSelect();
   showAlert('excel-alert', 'ok', `✓ 已成功存入 ${excelRows.length} 筆`);
   clearGrid();
 }
