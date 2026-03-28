@@ -254,6 +254,8 @@ td { padding: 10px 14px; }
   <div class="setup-box">
     <h2>設定 Supabase 連線</h2>
     <p>BetTrack 使用 Supabase 儲存資料，讓你在任何裝置都能同步紀錄。只需幾步即可完成設定。</p>
+    <div class="setup-err" id="setup-err"></div>
+    <button class="btn btn-primary" id="btn-connect" onclick="connectSupabase()" style="width:100%;justify-content:center;margin-bottom:20px">連線並開始使用</button>
     <div class="setup-steps">
       <div class="setup-step">
         <div class="step-num">1</div>
@@ -298,8 +300,6 @@ CREATE POLICY "allow all" ON bets FOR ALL USING (true);</pre>
         </div>
       </div>
     </div>
-    <div class="setup-err" id="setup-err"></div>
-    <button class="btn btn-primary" id="btn-connect" onclick="connectSupabase()" style="width:100%;justify-content:center">連線並開始使用</button>
   </div>
 </div>
 
