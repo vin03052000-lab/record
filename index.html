@@ -1485,15 +1485,24 @@ function openHistoryReasonEdit(id, cellEl) {
   const bet = allBets.find(r => r.id === id);
   const current = new Set(Array.isArray(bet?.reasons) ? bet.reasons : []);
 
-  // 渲染 chip
+  // 渲染 chip（分類版）
   const chipsEl = document.getElementById(`reason-chips-hist-${id}`);
   if (chipsEl) {
-    chipsEl.innerHTML = betReasons.length
-      ? betReasons.map(r => `
-          <span class="reason-chip ${current.has(r) ? 'selected' : ''}"
+    const cats = Object.keys(reasonCats);
+    if (!cats.length) {
+      chipsEl.innerHTML = `<span style="font-size:12px;color:var(--muted2)">尚未建立任何原因，請至手動輸入頁新增</span>`;
+    } else {
+      chipsEl.innerHTML = cats.map(cat => {
+        const chips = reasonCats[cat].map(r => `
+          <span class="reason-chip ${current.has(r)?'selected':''}"
             onclick="this.classList.toggle('selected')"
-            style="font-size:11px;padding:3px 10px">${r}</span>`).join('')
-      : `<span style="font-size:12px;color:var(--muted2)">尚未建立任何原因，請至手動輸入頁新增</span>`;
+            style="font-size:11px;padding:3px 10px">${r}</span>`).join('');
+        return `<div style="margin-bottom:6px">
+          <div style="font-size:9px;color:var(--muted2);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase">${cat}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>
+        </div>`;
+      }).join('');
+    }
   }
 
   editor.style.display = 'block';
@@ -1646,32 +1655,59 @@ function exportExcel(filteredOnly = false) {
 }
 
 /* ── Bet Reasons ── */
-let betReasons = [];
+const DEFAULT_REASON_CATS = {
+  '初盤': ['初盤抓鬼','V&L 重注','峰哥重注','連續客場最後一場','深紅深綠','過盤率高對低','盤中讓分等於除盤讓分','隨意試手氣','124倍壓法','中鋒理論','主將受傷理論','跟老師','反老師','無腦受讓'],
+  '中場': ['下半場會放','中場數據','盤中感覺']
+};
+let reasonCats = {}; // { '初盤': [...], '中場': [...] }
+let betReasons = []; // flat list for backward compat
 let selectedReasons = new Set();
 let reasonDelMode = false;
 
 function loadBetReasons() {
-  betReasons = JSON.parse(localStorage.getItem('bt_bet_reasons') || '[]');
+  const saved = localStorage.getItem('bt_reason_cats');
+  if (saved) {
+    reasonCats = JSON.parse(saved);
+  } else {
+    // 第一次：用預設值，不理舊的 bt_bet_reasons
+    reasonCats = JSON.parse(JSON.stringify(DEFAULT_REASON_CATS));
+    saveReasonCats();
+  }
+  syncFlatList();
   renderReasonChips('reason-chips-entry');
-  // 如有超過 0 個原因才顯示刪除按鈕
   const delBtn = document.getElementById('btn-reason-del-toggle');
-  if (delBtn) delBtn.style.display = betReasons.length ? 'inline-flex' : 'none';
+  if (delBtn) delBtn.style.display = 'inline-flex';
 }
 
-function saveBetReasons() {
-  localStorage.setItem('bt_bet_reasons', JSON.stringify(betReasons));
+function saveReasonCats() {
+  localStorage.setItem('bt_reason_cats', JSON.stringify(reasonCats));
+  syncFlatList();
 }
+
+function syncFlatList() {
+  betReasons = Object.values(reasonCats).flat();
+}
+
+function saveBetReasons() { saveReasonCats(); }
 
 function renderReasonChips(containerId) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  el.innerHTML = betReasons.map((r, i) => {
-    const sel = selectedReasons.has(r);
-    const isDel = reasonDelMode;
-    return `<span class="reason-chip ${sel ? 'selected' : ''} ${isDel ? 'del-mode' : ''}"
-      onclick="${isDel ? `deleteReason(${i})` : `toggleReason('${r.replace(/'/g,"\\'")}', this)`}">
-      ${isDel ? '✕ ' : ''}${r}
-    </span>`;
+  const cats = Object.keys(reasonCats);
+  el.innerHTML = cats.map(cat => {
+    const reasons = reasonCats[cat];
+    const chips = reasons.map((r, i) => {
+      const sel = selectedReasons.has(r);
+      const isDel = reasonDelMode;
+      const safeR = r.replace(/'/g, "\\'");
+      return `<span class="reason-chip ${sel?'selected':''} ${isDel?'del-mode':''}"
+        onclick="${isDel ? `deleteReasonFromCat('${cat}',${i})` : `toggleReason('${safeR}',this)`}">
+        ${isDel?'✕ ':''}${r}</span>`;
+    }).join('');
+    return `<div style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--muted2);letter-spacing:.06em;margin-bottom:5px;text-transform:uppercase">${cat}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${chips}</div>
+    </div>`;
   }).join('');
 }
 
@@ -1686,33 +1722,42 @@ function toggleReason(reason, el) {
 }
 
 function addBetReason() {
-  const name = prompt('新增下注原因：');
-  if (!name || betReasons.includes(name)) return;
-  betReasons.push(name);
-  saveBetReasons();
-  const delBtn = document.getElementById('btn-reason-del-toggle');
-  if (delBtn) delBtn.style.display = 'inline-flex';
+  const cats = Object.keys(reasonCats);
+  const catChoice = prompt(`選擇分類（輸入數字）：\n${cats.map((c,i)=>`${i+1}. ${c}`).join('\n')}\n${cats.length+1}. 新增分類`);
+  if (!catChoice) return;
+  const idx = parseInt(catChoice) - 1;
+  let cat;
+  if (idx >= 0 && idx < cats.length) {
+    cat = cats[idx];
+  } else if (idx === cats.length) {
+    cat = prompt('新分類名稱：');
+    if (!cat) return;
+    if (!reasonCats[cat]) reasonCats[cat] = [];
+  } else return;
+
+  const name = prompt(`新增「${cat}」原因：`);
+  if (!name) return;
+  if (Object.values(reasonCats).flat().includes(name)) { alert('原因已存在'); return; }
+  reasonCats[cat].push(name);
+  saveReasonCats();
   renderReasonChips('reason-chips-entry');
-  // 也在 excel 預覽中的 reason chip 容器刷新
   document.querySelectorAll('[id^="reason-chips-excel-"]').forEach(el => {
     const i = el.id.replace('reason-chips-excel-', '');
     renderExcelReasonChips(parseInt(i));
   });
 }
 
-function deleteReason(idx) {
-  const name = betReasons[idx];
-  if (!confirm(`確認刪除「${name}」這個原因？`)) return;
-  betReasons.splice(idx, 1);
+function deleteReasonFromCat(cat, idx) {
+  const name = reasonCats[cat]?.[idx];
+  if (!name || !confirm(`確認刪除「${name}」？`)) return;
+  reasonCats[cat].splice(idx, 1);
+  if (!reasonCats[cat].length) delete reasonCats[cat];
   selectedReasons.delete(name);
-  saveBetReasons();
-  if (!betReasons.length) {
-    reasonDelMode = false;
-    const delBtn = document.getElementById('btn-reason-del-toggle');
-    if (delBtn) { delBtn.style.display = 'none'; delBtn.textContent = '✕ 刪除模式'; }
-  }
+  saveReasonCats();
   renderReasonChips('reason-chips-entry');
 }
+
+function deleteReason(idx) { /* legacy - no-op */ }
 
 function toggleReasonDelMode() {
   reasonDelMode = !reasonDelMode;
@@ -1742,10 +1787,17 @@ function renderExcelReasonChips(i) {
   if (!el) return;
   const row = excelRows[i];
   const rowReasons = row._reasons || new Set();
-  el.innerHTML = betReasons.map(r => {
-    const sel = rowReasons.has(r);
-    return `<span class="reason-chip ${sel ? 'selected' : ''}" style="font-size:11px;padding:3px 9px"
-      onclick="toggleExcelReason(${i}, '${r.replace(/'/g,"\\'")}', this)">${r}</span>`;
+  const cats = Object.keys(reasonCats);
+  el.innerHTML = cats.map(cat => {
+    const chips = reasonCats[cat].map(r => {
+      const sel = rowReasons.has(r);
+      return `<span class="reason-chip ${sel?'selected':''}" style="font-size:11px;padding:3px 9px"
+        onclick="toggleExcelReason(${i},'${r.replace(/'/g,"\\'")}',this)">${r}</span>`;
+    }).join('');
+    return `<div style="margin-bottom:4px">
+      <div style="font-size:9px;color:var(--muted2);margin-bottom:3px">${cat}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>
+    </div>`;
   }).join('');
 }
 
