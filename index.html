@@ -212,6 +212,18 @@ td { padding: 10px 14px; }
 .parse-status.done { background: rgba(52,211,153,.08); border: 1px solid rgba(52,211,153,.18); color: var(--win); }
 .parse-status.err { background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.18); color: var(--lose); }
 .spin { display: inline-block; animation: spin .8s linear infinite; font-style: normal; }
+/* ── Bet Reasons ── */
+.reason-panel { margin-top: 14px; }
+.reason-label { font-size: 11px; color: var(--muted); letter-spacing: .05em; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+.reason-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.reason-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border2); background: var(--s2); color: var(--muted); transition: all .12s; user-select: none; }
+.reason-chip:hover { border-color: var(--accent); color: var(--accent-h); }
+.reason-chip.selected { border-color: var(--accent); background: rgba(99,102,241,.18); color: var(--accent-h); }
+.reason-chip.del-mode { border-color: rgba(248,113,113,.3); color: var(--lose); background: rgba(248,113,113,.08); }
+.btn-add-reason { padding: 4px 10px; border-radius: 99px; font-size: 12px; cursor: pointer; border: 1px dashed var(--border2); background: transparent; color: var(--muted); font-family: var(--f); transition: all .15s; }
+.btn-add-reason:hover { border-color: var(--accent); color: var(--accent-h); }
+.reason-badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; background: rgba(99,102,241,.15); color: var(--accent-h); margin: 1px; }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Preview table ── */
@@ -280,6 +292,7 @@ td { padding: 10px 14px; }
   valid       numeric DEFAULT 0,
   profit      numeric DEFAULT 0,
   result      text,
+  reasons     text[] DEFAULT '{}',
   created_at  timestamptz DEFAULT now()
 );
 ALTER TABLE bets ENABLE ROW LEVEL SECURITY;
@@ -303,7 +316,22 @@ CREATE POLICY "allow all" ON bets FOR ALL USING (true);</pre>
   </div>
 </div>
 
-<!-- ── App shell ── -->
+<!-- ── Password Modal ── -->
+<div class="overlay" id="pwd-overlay" style="display:none;z-index:200">
+  <div class="setup-box" style="width:380px">
+    <h2 style="margin-bottom:6px">🔒 帳號驗證</h2>
+    <p style="margin-bottom:20px">請輸入 <strong id="pwd-account-name" style="color:var(--accent-h)"></strong> 的密碼</p>
+    <div class="setup-err" id="pwd-err" style="margin-bottom:12px"></div>
+    <div class="setup-label">密碼</div>
+    <input class="setup-input" id="pwd-input" type="password" placeholder="輸入密碼..." onkeydown="if(event.key==='Enter')confirmPwd()" style="margin-bottom:16px">
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="confirmPwd()" style="flex:1;justify-content:center">確認</button>
+      <button class="btn btn-ghost" onclick="cancelPwd()" style="flex:1;justify-content:center">取消</button>
+    </div>
+  </div>
+</div>
+
+
 <div class="shell">
   <!-- Sidebar -->
   <nav class="sidebar">
@@ -317,7 +345,10 @@ CREATE POLICY "allow all" ON bets FOR ALL USING (true);</pre>
       <select class="account-select" id="account-select" onchange="switchAccount(this.value)">
         <option value="主帳號">主帳號</option>
       </select>
-      <button class="btn-add-account" onclick="addAccount()">＋ 新增帳號</button>
+      <div style="display:flex;gap:5px;margin-top:5px">
+        <button class="btn-add-account" onclick="addAccount()" style="flex:1;margin-top:0">＋ 新增</button>
+        <button class="btn-add-account" onclick="deleteAccount()" style="flex:1;margin-top:0;border-color:rgba(248,113,113,.3);color:var(--lose)" title="刪除目前帳號">✕ 刪除</button>
+      </div>
     </div>
 
     <div class="nav">
@@ -397,7 +428,7 @@ LAL 湖人 @ 0.93
           <div class="tbl-wrap">
             <table>
               <thead>
-                <tr><th style="width:32px"><input type="checkbox" id="chk-all" onchange="toggleAllRows(this.checked)" style="cursor:pointer"></th><th>日期</th><th>類型</th><th>聯賽</th><th>賽事</th><th>下注隊伍</th><th>賠率</th><th>金額</th><th>輸贏</th><th>結果</th><th></th></tr>
+                <tr><th style="width:32px"><input type="checkbox" id="chk-all" onchange="toggleAllRows(this.checked)" style="cursor:pointer"></th><th>日期</th><th>類型</th><th>聯賽</th><th>賽事</th><th>下注隊伍</th><th>賠率</th><th>金額</th><th>輸贏</th><th>結果</th><th>下注原因</th><th></th></tr>
               </thead>
               <tbody id="excel-tbody"></tbody>
             </table>
@@ -476,7 +507,18 @@ LAL 湖人 @ 0.93
           輸贏金額：<span id="profit-val" style="font-weight:600"></span>
         </div>
 
-        <div style="display:flex;gap:10px">
+        <div class="reason-panel">
+          <div class="reason-label">
+            <span>下注原因 <span style="color:var(--muted2)">(可多選)</span></span>
+            <div style="display:flex;gap:6px">
+              <button class="btn-add-reason" onclick="addBetReason()">＋ 新增原因</button>
+              <button class="btn-add-reason" id="btn-reason-del-toggle" onclick="toggleReasonDelMode()" style="display:none">✕ 刪除模式</button>
+            </div>
+          </div>
+          <div class="reason-chips" id="reason-chips-entry"></div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-primary" onclick="submitEntry()">＋ 存入紀錄</button>
           <button class="btn btn-ghost" onclick="clearForm()">清除</button>
         </div>
@@ -496,6 +538,17 @@ LAL 湖人 @ 0.93
     <!-- ── Dashboard ── -->
     <div class="page" id="page-dashboard">
       <div class="ph"><h1>總覽</h1><p id="dash-sub">載入中...</p></div>
+
+      <!-- 時間篩選列 -->
+      <div class="filter-bar" style="margin-bottom:20px" id="dash-date-bar">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap">時間範圍</span>
+        <input type="date" id="dash-from" onchange="renderDashboard()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
+        <span style="font-size:12px;color:var(--muted)">～</span>
+        <input type="date" id="dash-to" onchange="renderDashboard()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
+        <div id="dash-month-btns" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+        <button class="btn btn-ghost btn-sm" onclick="clearDashDateFilter()">全部</button>
+      </div>
+
       <div class="stats" id="dash-stats"></div>
 
       <div class="chart-grid">
@@ -516,6 +569,14 @@ LAL 湖人 @ 0.93
           <div class="chart-wrap"><canvas id="c-full"></canvas></div>
         </div>
       </div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">走地 — 勝率 & 總報酬</div>
+        <div class="legend">
+          <span class="leg"><span class="leg-sq" style="background:var(--lose)"></span>勝率（左）</span>
+          <span class="leg"><span class="leg-dsh" style="border-color:var(--win)"></span>累積總輸贏（右）</span>
+        </div>
+        <div class="chart-wrap"><canvas id="c-live"></canvas></div>
+      </div>
       <div class="card">
         <div class="card-title">累積淨收益趨勢</div>
         <div class="chart-wrap-lg"><canvas id="c-profit"></canvas></div>
@@ -525,6 +586,16 @@ LAL 湖人 @ 0.93
     <!-- ── Chart ── -->
     <div class="page" id="page-chart">
       <div class="ph"><h1>圖表分析</h1></div>
+
+      <!-- 時間篩選列 -->
+      <div class="filter-bar" style="margin-bottom:16px">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap">時間範圍</span>
+        <input type="date" id="chart-from" onchange="renderChartPage(chartTabFilter)" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
+        <span style="font-size:12px;color:var(--muted)">～</span>
+        <input type="date" id="chart-to" onchange="renderChartPage(chartTabFilter)" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
+        <div id="chart-month-btns" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+        <button class="btn btn-ghost btn-sm" onclick="clearChartDateFilter()">全部</button>
+      </div>
 
       <!-- 聯賽篩選 -->
       <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
@@ -607,7 +678,7 @@ LAL 湖人 @ 0.93
             <thead>
               <tr>
                 <th>日期</th><th>類型</th><th>聯賽</th><th>賽事</th>
-                <th>下注隊伍</th><th>賠率</th><th>金額</th><th>輸贏</th><th>結果</th><th></th>
+                <th>下注隊伍</th><th>賠率</th><th>金額</th><th>輸贏</th><th>結果</th><th>下注原因</th><th></th>
               </tr>
             </thead>
             <tbody id="history-body"></tbody>
@@ -637,6 +708,8 @@ const FIXED_SB_URL = 'https://waqarpffhaqwtemicvun.supabase.co';
 const FIXED_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhcWFycGZmaGFxd3RlbWljdnVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjE3NTIsImV4cCI6MjA5MDE5Nzc1Mn0.92PhGgPIxMlFqvIMSdTjvccySeppouS7EF-6ESGPKcA';
 
 window.onload = async () => {
+  // 自動連線，不需要按連線按鈕
+  document.getElementById('overlay').style.display = 'none';
   await init(FIXED_SB_URL, FIXED_SB_KEY);
 
   const now = new Date();
@@ -645,6 +718,7 @@ window.onload = async () => {
   loadAccounts();
   leagueChange('NBA');
   initGrid();
+  loadBetReasons();
 };
 
 async function init(url, key) {
@@ -693,6 +767,8 @@ function showSetup() {
 }
 
 /* ── Accounts ── */
+let pendingAccountSwitch = null; // 待切換的帳號名
+
 function loadAccounts() {
   const saved = JSON.parse(localStorage.getItem('bt_accounts') || '["主帳號"]');
   accounts = saved;
@@ -708,15 +784,97 @@ function saveAccountsList() {
 function addAccount() {
   const name = prompt('新帳號名稱：');
   if (!name || accounts.includes(name)) return;
+  const pwd = prompt(`設定「${name}」的密碼（留空則不設密碼）：`);
   accounts.push(name);
   saveAccountsList();
+  // 儲存密碼
+  const pwds = JSON.parse(localStorage.getItem('bt_account_pwds') || '{}');
+  pwds[name] = pwd || '';
+  localStorage.setItem('bt_account_pwds', JSON.stringify(pwds));
   loadAccounts();
+  // 切換到新帳號（不需要驗證，因為剛建立）
   document.getElementById('account-select').value = name;
-  switchAccount(name);
+  doSwitchAccount(name);
 }
 
-async function switchAccount(name) {
+async function deleteAccount() {
+  if (accounts.length <= 1) { alert('至少需要保留一個帳號，無法刪除'); return; }
+  const name = currentAccount;
+  const betCount = allBets.length;
+  const msg = betCount > 0
+    ? `確認刪除帳號「${name}」？\n\n此帳號共有 ${betCount} 筆注單，刪除後所有資料將一併移除，無法復原！`
+    : `確認刪除帳號「${name}」？`;
+  if (!confirm(msg)) return;
+
+  // 需要密碼確認
+  const pwds = JSON.parse(localStorage.getItem('bt_account_pwds') || '{}');
+  const pwd = pwds[name] || '';
+  if (pwd) {
+    const input = prompt(`請再次輸入「${name}」的密碼以確認刪除：`);
+    if (input !== pwd) { alert('密碼錯誤，取消刪除'); return; }
+  }
+
+  // 刪除 Supabase 中該帳號的所有注單
+  if (sb && betCount > 0) {
+    const { error } = await sb.from('bets').delete().eq('account', name);
+    if (error) { alert('刪除資料失敗：' + error.message); return; }
+  }
+
+  // 移除帳號
+  accounts = accounts.filter(a => a !== name);
+  delete pwds[name];
+  localStorage.setItem('bt_account_pwds', JSON.stringify(pwds));
+  saveAccountsList();
+
+  // 切換到第一個帳號
+  loadAccounts();
+  doSwitchAccount(accounts[0]);
+}
+
+function switchAccount(name) {
+  if (name === currentAccount) return;
+  const pwds = JSON.parse(localStorage.getItem('bt_account_pwds') || '{}');
+  const pwd = pwds[name] || '';
+  if (pwd) {
+    // 需要密碼驗證
+    pendingAccountSwitch = name;
+    document.getElementById('pwd-account-name').textContent = name;
+    document.getElementById('pwd-input').value = '';
+    document.getElementById('pwd-err').style.display = 'none';
+    document.getElementById('pwd-overlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('pwd-input').focus(), 100);
+  } else {
+    doSwitchAccount(name);
+  }
+}
+
+function confirmPwd() {
+  const input = document.getElementById('pwd-input').value;
+  const pwds = JSON.parse(localStorage.getItem('bt_account_pwds') || '{}');
+  const correct = pwds[pendingAccountSwitch] || '';
+  if (input === correct) {
+    document.getElementById('pwd-overlay').style.display = 'none';
+    doSwitchAccount(pendingAccountSwitch);
+    pendingAccountSwitch = null;
+  } else {
+    const errEl = document.getElementById('pwd-err');
+    errEl.textContent = '密碼錯誤，請再試一次';
+    errEl.style.display = 'block';
+    document.getElementById('pwd-input').value = '';
+    document.getElementById('pwd-input').focus();
+  }
+}
+
+function cancelPwd() {
+  document.getElementById('pwd-overlay').style.display = 'none';
+  // 恢復 select 回目前帳號
+  document.getElementById('account-select').value = currentAccount;
+  pendingAccountSwitch = null;
+}
+
+async function doSwitchAccount(name) {
   currentAccount = name;
+  document.getElementById('account-select').value = name;
   await loadBets();
   const pg = document.querySelector('.page.show')?.id?.replace('page-','');
   if (pg === 'dashboard') renderDashboard();
@@ -837,6 +995,7 @@ function buildRow() {
     valid:      amount,
     profit,
     result:     document.getElementById('f-result')?.value || '輸',
+    reasons:    getSelectedReasons(),
   };
 }
 
@@ -850,6 +1009,7 @@ function clearForm() {
   document.getElementById('match-preview').style.display = 'none';
   document.getElementById('profit-preview').style.display = 'none';
   document.getElementById('f-bet_team').innerHTML = '<option value="">請先選擇主客隊</option>';
+  clearSelectedReasons();
 }
 
 async function submitBatch() {
@@ -878,8 +1038,67 @@ async function submitBatch() {
 }
 
 /* ── Dashboard ── */
+
+function filterByDateRange(bets, fromEl, toEl) {
+  const from = fromEl?.value || '';
+  const to   = toEl?.value   || '';
+  if (!from && !to) return bets;
+  return bets.filter(r => {
+    if (from && r.date < from) return false;
+    if (to   && r.date > to)   return false;
+    return true;
+  });
+}
+
+function buildMonthBtns(containerId, fromElId, toElId, callbackFn) {
+  // 從 allBets 抽取 YYYY-MM，產生月份快速按鈕
+  const monthSet = new Set();
+  allBets.forEach(r => {
+    if (r.date && r.date.length === 10) {
+      // YYYY-MM-DD → 取 YYYY-MM
+      monthSet.add(r.date.substring(0, 7));
+    }
+  });
+
+  const months = [...monthSet].sort();
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.innerHTML = months.map(ym => {
+    const [y, m] = ym.split('-');
+    return `<button class="type-tab btn-sm" style="padding:4px 10px;font-size:11px" data-ym="${ym}">${parseInt(m)}月${y !== String(new Date().getFullYear()) ? ' ' + y : ''}</button>`;
+  }).join('');
+
+  container.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const [y, m] = btn.dataset.ym.split('-');
+      const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate().toString().padStart(2, '0');
+      document.getElementById(fromElId).value = `${y}-${m}-01`;
+      document.getElementById(toElId).value   = `${y}-${m}-${lastDay}`;
+      container.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      callbackFn();
+    });
+  });
+}
+
+function clearDashDateFilter() {
+  document.getElementById('dash-from').value = '';
+  document.getElementById('dash-to').value   = '';
+  document.querySelectorAll('#dash-month-btns .type-tab').forEach(b => b.classList.remove('active'));
+  renderDashboard();
+}
+
+function clearChartDateFilter() {
+  document.getElementById('chart-from').value = '';
+  document.getElementById('chart-to').value   = '';
+  document.querySelectorAll('#chart-month-btns .type-tab').forEach(b => b.classList.remove('active'));
+  renderChartPage(chartTabFilter);
+}
+
 function renderDashboard() {
-  const bets = allBets;
+  buildMonthBtns('dash-month-btns', 'dash-from', 'dash-to', 'renderDashboard');
+  const bets = filterByDateRange(allBets, document.getElementById('dash-from'), document.getElementById('dash-to'));
   const half = bets.filter(r => r.type === '下半場');
   const full = bets.filter(r => r.type === '初盤');
   const live = bets.filter(r => r.type === '走地');
@@ -911,7 +1130,10 @@ function renderDashboard() {
   const liveProfit = live.reduce((s,r) => s + (+r.profit||0), 0);
   const liveROI    = liveBet ? ((liveProfit / liveBet) * 100).toFixed(1) : '--';
 
-  document.getElementById('dash-sub').textContent = `${currentAccount} · 共 ${bets.length} 筆注單`;
+  const fromVal = document.getElementById('dash-from')?.value;
+  const toVal   = document.getElementById('dash-to')?.value;
+  const rangeTxt = (fromVal || toVal) ? ` · ${fromVal||''}～${toVal||''}` : '';
+  document.getElementById('dash-sub').textContent = `${currentAccount} · 共 ${bets.length} 筆注單${rangeTxt}`;
   document.getElementById('dash-stats').innerHTML = `
     <div class="stat"><div class="stat-lbl">總投注</div><div class="stat-val">${fmtN(totalBet)}</div><div class="stat-sub">元</div></div>
     <div class="stat"><div class="stat-lbl">淨收益</div><div class="stat-val ${totalProfit>=0?'pos':'neg'}">${totalProfit>=0?'+':''}${fmtN(totalProfit)}</div><div class="stat-sub">元</div></div>
@@ -924,6 +1146,7 @@ function renderDashboard() {
 
   buildDualChart('c-half', half, '#c084fc');
   buildDualChart('c-full', full, '#60a5fa');
+  buildDualChart('c-live', live, '#f87171');
   buildProfitLine('c-profit', bets);
 }
 
@@ -999,10 +1222,12 @@ function chartTab(val, btn) {
 
 function getChartBets() {
   let bets = chartLeagueFilter === 'all' ? allBets : allBets.filter(r => r.league === chartLeagueFilter);
+  bets = filterByDateRange(bets, document.getElementById('chart-from'), document.getElementById('chart-to'));
   return bets;
 }
 
 function renderChartPage(filter) {
+  buildMonthBtns('chart-month-btns', 'chart-from', 'chart-to', () => renderChartPage(chartTabFilter));
   const base = getChartBets();
   const bets = filter === 'all' ? base : base.filter(r => r.type === filter);
   const half = filter === 'all' ? base.filter(r=>r.type==='下半場') : (filter==='下半場' ? bets : []);
@@ -1106,8 +1331,10 @@ function populateDateSelect() {
   const cur = sel.value;
   sel.innerHTML = '<option value="">所有日期</option>' +
     dates.map(d => {
-      const [m,day] = d.split('-');
-      return `<option value="${d}">${m}/${day}</option>`;
+      // d is YYYY-MM-DD or MM-DD (legacy)
+      const parts = d.split('-');
+      const label = parts.length === 3 ? `${parseInt(parts[1])}/${parseInt(parts[2])} (${parts[0]})` : d;
+      return `<option value="${d}">${label}</option>`;
     }).join('');
   if (cur) sel.value = cur;
 }
@@ -1141,17 +1368,8 @@ function renderHistory() {
   if (dateOne) {
     bets = bets.filter(r => r.date === dateOne);
   } else {
-    // 把 YYYY-MM-DD 轉成 MM-DD 來比較
-    if (dateFrom) {
-      const [,fm,fd] = dateFrom.split('-');
-      const fromStr = fm + '-' + fd;
-      bets = bets.filter(r => r.date >= fromStr);
-    }
-    if (dateTo) {
-      const [,tm,td] = dateTo.split('-');
-      const toStr = tm + '-' + td;
-      bets = bets.filter(r => r.date <= toStr);
-    }
+    if (dateFrom) bets = bets.filter(r => r.date >= dateFrom);
+    if (dateTo)   bets = bets.filter(r => r.date <= dateTo);
   }
 
   bets.sort((a,b) => b.date.localeCompare(a.date));
@@ -1177,6 +1395,19 @@ function renderHistory() {
       <td class="mono">${fmtN(+r.amount||0)}</td>
       <td class="mono ${+r.profit>=0?'pos':'neg'}">${+r.profit>=0?'+':''}${fmtN(+r.profit||0)}</td>
       <td><span class="badge ${r.result==='贏'?'badge-win':'badge-lose'}">${r.result}</span></td>
+      <td style="min-width:160px">
+        <div class="history-reason-cell" onclick="openHistoryReasonEdit('${r.id}', this)" title="點擊編輯原因" style="cursor:pointer;min-height:24px">
+          ${renderReasonBadges(r.reasons)}
+          <span class="reason-edit-hint" style="font-size:10px;color:var(--muted2);margin-left:4px">✎</span>
+        </div>
+        <div class="history-reason-editor" id="reason-editor-${r.id}" style="display:none;margin-top:6px">
+          <div class="reason-chips" id="reason-chips-hist-${r.id}" style="gap:5px;margin-bottom:8px"></div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveHistoryReasons('${r.id}')">儲存</button>
+            <button class="btn btn-ghost btn-sm" onclick="closeHistoryReasonEdit('${r.id}')">取消</button>
+          </div>
+        </div>
+      </td>
       <td><button class="btn btn-danger btn-sm" onclick="deleteRow('${r.id}')">刪</button></td>
     </tr>`).join('');
 
@@ -1185,7 +1416,7 @@ function renderHistory() {
       <td colspan="6" style="color:var(--muted);font-size:12px">共 ${bets.length} 筆　勝率 ${wr}%　${wins}W/${bets.length-wins}L</td>
       <td class="mono">${fmtN(totalAmt)}</td>
       <td class="mono ${totalProfit>=0?'pos':'neg'}">${totalProfit>=0?'+':''}${fmtN(totalProfit)}</td>
-      <td colspan="2"></td>
+      <td colspan="3"></td>
     </tr>`;
 }
 
@@ -1200,6 +1431,67 @@ function clearFilters() {
   renderHistory();
 }
 
+/* ── History Reason Edit ── */
+function openHistoryReasonEdit(id, cellEl) {
+  // 關掉其他開著的編輯器
+  document.querySelectorAll('.history-reason-editor').forEach(el => {
+    if (el.id !== `reason-editor-${id}`) el.style.display = 'none';
+  });
+
+  const editor = document.getElementById(`reason-editor-${id}`);
+  if (!editor) return;
+  if (editor.style.display === 'block') { closeHistoryReasonEdit(id); return; }
+
+  // 找到這筆 bet 目前的 reasons
+  const bet = allBets.find(r => r.id === id);
+  const current = new Set(Array.isArray(bet?.reasons) ? bet.reasons : []);
+
+  // 渲染 chip
+  const chipsEl = document.getElementById(`reason-chips-hist-${id}`);
+  if (chipsEl) {
+    chipsEl.innerHTML = betReasons.length
+      ? betReasons.map(r => `
+          <span class="reason-chip ${current.has(r) ? 'selected' : ''}"
+            onclick="this.classList.toggle('selected')"
+            style="font-size:11px;padding:3px 10px">${r}</span>`).join('')
+      : `<span style="font-size:12px;color:var(--muted2)">尚未建立任何原因，請至手動輸入頁新增</span>`;
+  }
+
+  editor.style.display = 'block';
+  cellEl.querySelector('.reason-edit-hint').style.display = 'none';
+}
+
+function closeHistoryReasonEdit(id) {
+  const editor = document.getElementById(`reason-editor-${id}`);
+  if (editor) editor.style.display = 'none';
+  const cell = editor?.previousElementSibling;
+  if (cell) { const hint = cell.querySelector('.reason-edit-hint'); if (hint) hint.style.display = ''; }
+}
+
+async function saveHistoryReasons(id) {
+  const chipsEl = document.getElementById(`reason-chips-hist-${id}`);
+  const selected = chipsEl
+    ? [...chipsEl.querySelectorAll('.reason-chip.selected')].map(el => el.textContent.trim())
+    : [];
+
+  if (!sb) { alert('尚未連線 Supabase'); return; }
+  const { error } = await sb.from('bets').update({ reasons: selected }).eq('id', id);
+  if (error) { alert('儲存失敗：' + error.message); return; }
+
+  // 更新 allBets
+  const bet = allBets.find(r => r.id === id);
+  if (bet) bet.reasons = selected;
+
+  // 更新顯示
+  const editor = document.getElementById(`reason-editor-${id}`);
+  const cell = editor?.previousElementSibling;
+  if (cell) {
+    cell.innerHTML = renderReasonBadges(selected) +
+      `<span class="reason-edit-hint" style="font-size:10px;color:var(--muted2);margin-left:4px">✎</span>`;
+  }
+  closeHistoryReasonEdit(id);
+}
+
 async function deleteRow(id) {
   if (!confirm('確認刪除這筆紀錄？')) return;
   const { error } = await sb.from('bets').delete().eq('id', id);
@@ -1212,8 +1504,7 @@ async function deleteByDate() {
   const dateVal = document.getElementById('delete-date').value;
   if (!dateVal) { alert('⚠ 請先選擇要刪除的日期'); return; }
 
-  const [,m,d] = dateVal.split('-');
-  const dateStr = m.padStart(2,'0') + '-' + d.padStart(2,'0');
+  const dateStr = dateVal; // 直接用 YYYY-MM-DD
 
   const matched = allBets.filter(r => r.date === dateStr && r.account === currentAccount);
   if (!matched.length) { alert(`${dateStr} 查無任何注單`); return; }
@@ -1255,6 +1546,121 @@ function exportCSV() {
   a.href = URL.createObjectURL(blob);
   a.download = `bettrack_${currentAccount}_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
+}
+
+/* ── Bet Reasons ── */
+let betReasons = [];
+let selectedReasons = new Set();
+let reasonDelMode = false;
+
+function loadBetReasons() {
+  betReasons = JSON.parse(localStorage.getItem('bt_bet_reasons') || '[]');
+  renderReasonChips('reason-chips-entry');
+  // 如有超過 0 個原因才顯示刪除按鈕
+  const delBtn = document.getElementById('btn-reason-del-toggle');
+  if (delBtn) delBtn.style.display = betReasons.length ? 'inline-flex' : 'none';
+}
+
+function saveBetReasons() {
+  localStorage.setItem('bt_bet_reasons', JSON.stringify(betReasons));
+}
+
+function renderReasonChips(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = betReasons.map((r, i) => {
+    const sel = selectedReasons.has(r);
+    const isDel = reasonDelMode;
+    return `<span class="reason-chip ${sel ? 'selected' : ''} ${isDel ? 'del-mode' : ''}"
+      onclick="${isDel ? `deleteReason(${i})` : `toggleReason('${r.replace(/'/g,"\\'")}', this)`}">
+      ${isDel ? '✕ ' : ''}${r}
+    </span>`;
+  }).join('');
+}
+
+function toggleReason(reason, el) {
+  if (selectedReasons.has(reason)) {
+    selectedReasons.delete(reason);
+    el.classList.remove('selected');
+  } else {
+    selectedReasons.add(reason);
+    el.classList.add('selected');
+  }
+}
+
+function addBetReason() {
+  const name = prompt('新增下注原因：');
+  if (!name || betReasons.includes(name)) return;
+  betReasons.push(name);
+  saveBetReasons();
+  const delBtn = document.getElementById('btn-reason-del-toggle');
+  if (delBtn) delBtn.style.display = 'inline-flex';
+  renderReasonChips('reason-chips-entry');
+  // 也在 excel 預覽中的 reason chip 容器刷新
+  document.querySelectorAll('[id^="reason-chips-excel-"]').forEach(el => {
+    const i = el.id.replace('reason-chips-excel-', '');
+    renderExcelReasonChips(parseInt(i));
+  });
+}
+
+function deleteReason(idx) {
+  const name = betReasons[idx];
+  if (!confirm(`確認刪除「${name}」這個原因？`)) return;
+  betReasons.splice(idx, 1);
+  selectedReasons.delete(name);
+  saveBetReasons();
+  if (!betReasons.length) {
+    reasonDelMode = false;
+    const delBtn = document.getElementById('btn-reason-del-toggle');
+    if (delBtn) { delBtn.style.display = 'none'; delBtn.textContent = '✕ 刪除模式'; }
+  }
+  renderReasonChips('reason-chips-entry');
+}
+
+function toggleReasonDelMode() {
+  reasonDelMode = !reasonDelMode;
+  const btn = document.getElementById('btn-reason-del-toggle');
+  if (btn) btn.textContent = reasonDelMode ? '完成' : '✕ 刪除模式';
+  renderReasonChips('reason-chips-entry');
+}
+
+function getSelectedReasons() {
+  return [...selectedReasons];
+}
+
+function clearSelectedReasons() {
+  selectedReasons.clear();
+  renderReasonChips('reason-chips-entry');
+}
+
+function renderReasonBadges(reasons) {
+  if (!reasons || !reasons.length) return '<span style="color:var(--muted2);font-size:11px">—</span>';
+  const list = Array.isArray(reasons) ? reasons : (typeof reasons === 'string' ? JSON.parse(reasons) : []);
+  return list.map(r => `<span class="reason-badge">${r}</span>`).join('');
+}
+
+/* ── Excel row reason chips ── */
+function renderExcelReasonChips(i) {
+  const el = document.getElementById(`reason-chips-excel-${i}`);
+  if (!el) return;
+  const row = excelRows[i];
+  const rowReasons = row._reasons || new Set();
+  el.innerHTML = betReasons.map(r => {
+    const sel = rowReasons.has(r);
+    return `<span class="reason-chip ${sel ? 'selected' : ''}" style="font-size:11px;padding:3px 9px"
+      onclick="toggleExcelReason(${i}, '${r.replace(/'/g,"\\'")}', this)">${r}</span>`;
+  }).join('');
+}
+
+function toggleExcelReason(i, reason, el) {
+  if (!excelRows[i]._reasons) excelRows[i]._reasons = new Set();
+  if (excelRows[i]._reasons.has(reason)) {
+    excelRows[i]._reasons.delete(reason);
+    el.classList.remove('selected');
+  } else {
+    excelRows[i]._reasons.add(reason);
+    el.classList.add('selected');
+  }
 }
 
 /* ── Helpers ── */
@@ -1354,8 +1760,7 @@ function parseGrid() {
 
   let forceDate = '';
   if (dateVal) {
-    const [,m,d] = dateVal.split('-');
-    forceDate = m.padStart(2,'0') + '-' + d.padStart(2,'0');
+    forceDate = dateVal; // 直接用 YYYY-MM-DD
   }
 
   // 以「日期時間行」為分隔切出每筆注單
@@ -1394,8 +1799,8 @@ function parseGrid() {
     // 日期
     let date = forceDate;
     if (!date) {
-      const dm = L1.match(/\d{4}-(\d{2})-(\d{2})/);
-      if (dm) date = dm[1] + '-' + dm[2];
+      const dm = L1.match(/(\d{4}-\d{2}-\d{2})/);
+      if (dm) date = dm[1]; // 完整 YYYY-MM-DD
     }
 
     // 類型
@@ -1476,10 +1881,13 @@ function parseGrid() {
       <td class="mono">${fmtN(r.amount)}${r._count>1?` <span style="font-size:10px;color:var(--accent-h);background:rgba(99,102,241,.15);padding:1px 6px;border-radius:99px">×${r._count}</span>`:''}</td>
       <td class="mono ${r.profit>=0?'pos':'neg'}">${r.profit>=0?'+':''}${fmtN(r.profit)}</td>
       <td><span class="badge ${r.result==='贏'?'badge-win':'badge-lose'}">${r.result}</span></td>
+      <td style="min-width:180px"><div class="reason-chips" id="reason-chips-excel-${i}" style="gap:4px"></div></td>
       <td><button class="btn btn-danger btn-sm" onclick="removeExcelRow(${i})">✕</button></td>
     </tr>`).join('');
   document.getElementById('excel-preview').style.display = 'block';
   document.getElementById('excel-preview').scrollIntoView({ behavior:'smooth', block:'start' });
+  // 渲染每行的 reason chips
+  excelRows.forEach((_, i) => renderExcelReasonChips(i));
 }
 
 function selectAllRows() {
@@ -1540,8 +1948,10 @@ function renderExcelPreview() {
       <td class="mono">${fmtN(r.amount)}${(r._count||1)>1?` <span style="font-size:10px;color:var(--accent-h);background:rgba(99,102,241,.15);padding:1px 6px;border-radius:99px">×${r._count}</span>`:''}</td>
       <td class="mono ${r.profit>=0?'pos':'neg'}">${r.profit>=0?'+':''}${fmtN(r.profit)}</td>
       <td><span class="badge ${r.result==='贏'?'badge-win':'badge-lose'}">${r.result}</span></td>
+      <td style="min-width:180px"><div class="reason-chips" id="reason-chips-excel-${i}" style="gap:4px"></div></td>
       <td><button class="btn btn-danger btn-sm" onclick="removeExcelRow(${i})">✕</button></td>
     </tr>`).join('');
+  excelRows.forEach((_, i) => renderExcelReasonChips(i));
 }
 
 function removeExcelRow(i) {
@@ -1553,10 +1963,13 @@ function removeExcelRow(i) {
 async function saveExcelRows() {
   if (!excelRows.length) return;
   if (!sb) { showAlert('excel-alert', 'err', '尚未連線 Supabase'); return; }
-  const toInsert = excelRows.map(({ _count, ...r }) => r);
+  const toInsert = excelRows.map(({ _count, _reasons, ...r }) => ({
+    ...r,
+    reasons: _reasons ? [..._reasons] : []
+  }));
   const { error } = await sb.from('bets').insert(toInsert);
   if (error) { showAlert('excel-alert', 'err', '儲存失敗：' + error.message); return; }
-  excelRows.forEach(r => allBets.push(r));
+  excelRows.forEach((r, i) => allBets.push({ ...r, reasons: toInsert[i].reasons }));
   populateDateSelect();
   showAlert('excel-alert', 'ok', `✓ 已成功存入 ${excelRows.length} 筆`);
   clearGrid();
