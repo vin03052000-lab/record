@@ -731,6 +731,7 @@ let accounts = ['主帳號'];
 let allBets = [];
 let chartRefs = {};
 let pendingRows = [];
+let hasReasonsCol = false;
 
 /* ── Init ── */
 /* ── 固定 Supabase 設定（分享給所有使用者）── */
@@ -756,6 +757,8 @@ async function init(url, key) {
   const { error } = await sb.from('bets').select('id').limit(1);
   if (error) { setConn(false); return false; }
   setConn(true);
+  const { error: colErr } = await sb.from('bets').select('reasons').limit(1);
+  hasReasonsCol = !colErr;
   await loadBets();
   return true;
 }
@@ -1025,7 +1028,7 @@ function buildRow() {
     valid:      amount,
     profit,
     result:     document.getElementById('f-result')?.value || '輸',
-    reasons:    getSelectedReasons(),
+    ...(hasReasonsCol ? { reasons: getSelectedReasons() } : {}),
   };
 }
 
@@ -1489,20 +1492,18 @@ function openHistoryReasonEdit(id, cellEl) {
   const chipsEl = document.getElementById(`reason-chips-hist-${id}`);
   if (chipsEl) {
     const cats = Object.keys(reasonCats);
-    if (!cats.length) {
-      chipsEl.innerHTML = `<span style="font-size:12px;color:var(--muted2)">尚未建立任何原因，請至手動輸入頁新增</span>`;
-    } else {
-      chipsEl.innerHTML = cats.map(cat => {
-        const chips = reasonCats[cat].map(r => `
-          <span class="reason-chip ${current.has(r)?'selected':''}"
-            onclick="this.classList.toggle('selected')"
-            style="font-size:11px;padding:3px 10px">${r}</span>`).join('');
-        return `<div style="margin-bottom:6px">
-          <div style="font-size:9px;color:var(--muted2);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase">${cat}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>
-        </div>`;
-      }).join('');
-    }
+    chipsEl.innerHTML = cats.length
+      ? cats.map(cat => {
+          const chips = reasonCats[cat].map(r =>
+            `<span class="reason-chip ${current.has(r)?'selected':''}"
+              onclick="this.classList.toggle('selected')"
+              style="font-size:11px;padding:3px 10px">${r}</span>`).join('');
+          return `<div style="margin-bottom:6px">
+            <div style="font-size:9px;color:var(--muted2);margin-bottom:4px">${cat}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>
+          </div>`;
+        }).join('')
+      : `<span style="font-size:12px;color:var(--muted2)">尚未建立任何原因</span>`;
   }
 
   editor.style.display = 'block';
@@ -1523,14 +1524,18 @@ async function saveHistoryReasons(id) {
     : [];
 
   if (!sb) { alert('尚未連線 Supabase'); return; }
+
+  if (!hasReasonsCol) {
+    alert('⚠ 下注原因欄位尚未建立。\n\n請到 Supabase → SQL Editor 執行：\n\nALTER TABLE bets ADD COLUMN IF NOT EXISTS reasons text[] DEFAULT \'{}\';\n\n執行後重新整理頁面即可。');
+    return;
+  }
+
   const { error } = await sb.from('bets').update({ reasons: selected }).eq('id', id);
   if (error) { alert('儲存失敗：' + error.message); return; }
 
-  // 更新 allBets
   const bet = allBets.find(r => r.id === id);
   if (bet) bet.reasons = selected;
 
-  // 更新顯示
   const editor = document.getElementById(`reason-editor-${id}`);
   const cell = editor?.previousElementSibling;
   if (cell) {
@@ -1659,20 +1664,15 @@ const DEFAULT_REASON_CATS = {
   '初盤': ['初盤抓鬼','V&L 重注','峰哥重注','連續客場最後一場','深紅深綠','過盤率高對低','盤中讓分等於除盤讓分','隨意試手氣','124倍壓法','中鋒理論','主將受傷理論','跟老師','反老師','無腦受讓'],
   '中場': ['下半場會放','中場數據','盤中感覺']
 };
-let reasonCats = {}; // { '初盤': [...], '中場': [...] }
-let betReasons = []; // flat list for backward compat
+let reasonCats = {};
+let betReasons = [];
 let selectedReasons = new Set();
 let reasonDelMode = false;
 
 function loadBetReasons() {
   const saved = localStorage.getItem('bt_reason_cats');
-  if (saved) {
-    reasonCats = JSON.parse(saved);
-  } else {
-    // 第一次：用預設值，不理舊的 bt_bet_reasons
-    reasonCats = JSON.parse(JSON.stringify(DEFAULT_REASON_CATS));
-    saveReasonCats();
-  }
+  reasonCats = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_REASON_CATS));
+  if (!saved) saveReasonCats();
   syncFlatList();
   renderReasonChips('reason-chips-entry');
   const delBtn = document.getElementById('btn-reason-del-toggle');
@@ -1693,10 +1693,8 @@ function saveBetReasons() { saveReasonCats(); }
 function renderReasonChips(containerId) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  const cats = Object.keys(reasonCats);
-  el.innerHTML = cats.map(cat => {
-    const reasons = reasonCats[cat];
-    const chips = reasons.map((r, i) => {
+  el.innerHTML = Object.keys(reasonCats).map(cat => {
+    const chips = reasonCats[cat].map((r, i) => {
       const sel = selectedReasons.has(r);
       const isDel = reasonDelMode;
       const safeR = r.replace(/'/g, "\\'");
@@ -1705,7 +1703,7 @@ function renderReasonChips(containerId) {
         ${isDel?'✕ ':''}${r}</span>`;
     }).join('');
     return `<div style="margin-bottom:8px">
-      <div style="font-size:10px;color:var(--muted2);letter-spacing:.06em;margin-bottom:5px;text-transform:uppercase">${cat}</div>
+      <div style="font-size:10px;color:var(--muted2);letter-spacing:.06em;margin-bottom:5px">${cat}</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">${chips}</div>
     </div>`;
   }).join('');
@@ -1734,16 +1732,14 @@ function addBetReason() {
     if (!cat) return;
     if (!reasonCats[cat]) reasonCats[cat] = [];
   } else return;
-
   const name = prompt(`新增「${cat}」原因：`);
   if (!name) return;
-  if (Object.values(reasonCats).flat().includes(name)) { alert('原因已存在'); return; }
+  if (betReasons.includes(name)) { alert('原因已存在'); return; }
   reasonCats[cat].push(name);
   saveReasonCats();
   renderReasonChips('reason-chips-entry');
   document.querySelectorAll('[id^="reason-chips-excel-"]').forEach(el => {
-    const i = el.id.replace('reason-chips-excel-', '');
-    renderExcelReasonChips(parseInt(i));
+    renderExcelReasonChips(parseInt(el.id.replace('reason-chips-excel-','')));
   });
 }
 
@@ -1757,7 +1753,7 @@ function deleteReasonFromCat(cat, idx) {
   renderReasonChips('reason-chips-entry');
 }
 
-function deleteReason(idx) { /* legacy - no-op */ }
+function deleteReason(idx) { /* legacy no-op */ }
 
 function toggleReasonDelMode() {
   reasonDelMode = !reasonDelMode;
@@ -1766,9 +1762,7 @@ function toggleReasonDelMode() {
   renderReasonChips('reason-chips-entry');
 }
 
-function getSelectedReasons() {
-  return [...selectedReasons];
-}
+function getSelectedReasons() { return [...selectedReasons]; }
 
 function clearSelectedReasons() {
   selectedReasons.clear();
@@ -1785,10 +1779,8 @@ function renderReasonBadges(reasons) {
 function renderExcelReasonChips(i) {
   const el = document.getElementById(`reason-chips-excel-${i}`);
   if (!el) return;
-  const row = excelRows[i];
-  const rowReasons = row._reasons || new Set();
-  const cats = Object.keys(reasonCats);
-  el.innerHTML = cats.map(cat => {
+  const rowReasons = excelRows[i]._reasons || new Set();
+  el.innerHTML = Object.keys(reasonCats).map(cat => {
     const chips = reasonCats[cat].map(r => {
       const sel = rowReasons.has(r);
       return `<span class="reason-chip ${sel?'selected':''}" style="font-size:11px;padding:3px 9px"
@@ -2112,13 +2104,14 @@ function removeExcelRow(i) {
 async function saveExcelRows() {
   if (!excelRows.length) return;
   if (!sb) { showAlert('excel-alert', 'err', '尚未連線 Supabase'); return; }
-  const toInsert = excelRows.map(({ _count, _reasons, ...r }) => ({
-    ...r,
-    reasons: _reasons ? [..._reasons] : []
-  }));
+  const toInsert = excelRows.map(({ _count, _reasons, ...r }) => {
+    const row = { ...r };
+    if (hasReasonsCol) row.reasons = _reasons ? [..._reasons] : [];
+    return row;
+  });
   const { error } = await sb.from('bets').insert(toInsert);
   if (error) { showAlert('excel-alert', 'err', '儲存失敗：' + error.message); return; }
-  excelRows.forEach((r, i) => allBets.push({ ...r, reasons: toInsert[i].reasons }));
+  excelRows.forEach((r, i) => allBets.push({ ...r, reasons: toInsert[i].reasons || [] }));
   populateDateSelect();
   showAlert('excel-alert', 'ok', `✓ 已成功存入 ${excelRows.length} 筆`);
   clearGrid();
