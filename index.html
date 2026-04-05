@@ -6,6 +6,7 @@
 <title>BetTrack — 下注追蹤系統</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -358,7 +359,7 @@ CREATE POLICY "allow all" ON bets FOR ALL USING (true);</pre>
       <button class="nav-item" id="nav-chart" onclick="goPage('chart')"><i class="nav-icon">↗</i><span>圖表分析</span></button>
       <button class="nav-item" id="nav-history" onclick="goPage('history')"><i class="nav-icon">☰</i><span>歷史紀錄</span></button>
       <div class="nav-sep"></div>
-      <button class="nav-item" onclick="exportCSV()"><i class="nav-icon">↓</i><span>匯出 CSV</span></button>
+      <button class="nav-item" onclick="exportExcel()"><i class="nav-icon">↓</i><span>匯出 Excel</span></button>
       <button class="nav-item" onclick="showSetup()" style="color:var(--muted)"><i class="nav-icon">⚙</i><span>設定</span></button>
     </div>
 
@@ -540,12 +541,20 @@ LAL 湖人 @ 0.93
       <div class="ph"><h1>總覽</h1><p id="dash-sub">載入中...</p></div>
 
       <!-- 時間篩選列 -->
-      <div class="filter-bar" style="margin-bottom:20px" id="dash-date-bar">
-        <span style="font-size:12px;color:var(--muted);white-space:nowrap">時間範圍</span>
-        <input type="date" id="dash-from" onchange="renderDashboard()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
+      <div class="filter-bar" style="margin-bottom:20px;flex-wrap:wrap" id="dash-date-bar">
+        <select id="dash-year" onchange="onDashYearMonthChange()" style="font-family:var(--f)">
+          <option value="">所有年份</option>
+        </select>
+        <select id="dash-month" onchange="onDashYearMonthChange()" style="font-family:var(--f)">
+          <option value="">所有月份</option>
+          <option value="01">1月</option><option value="02">2月</option><option value="03">3月</option>
+          <option value="04">4月</option><option value="05">5月</option><option value="06">6月</option>
+          <option value="07">7月</option><option value="08">8月</option><option value="09">9月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
+        <input type="date" id="dash-from" onchange="onDashDateRangeChange()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
         <span style="font-size:12px;color:var(--muted)">～</span>
-        <input type="date" id="dash-to" onchange="renderDashboard()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
-        <div id="dash-month-btns" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+        <input type="date" id="dash-to" onchange="onDashDateRangeChange()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
         <button class="btn btn-ghost btn-sm" onclick="clearDashDateFilter()">全部</button>
       </div>
 
@@ -588,12 +597,20 @@ LAL 湖人 @ 0.93
       <div class="ph"><h1>圖表分析</h1></div>
 
       <!-- 時間篩選列 -->
-      <div class="filter-bar" style="margin-bottom:16px">
-        <span style="font-size:12px;color:var(--muted);white-space:nowrap">時間範圍</span>
-        <input type="date" id="chart-from" onchange="renderChartPage(chartTabFilter)" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
+      <div class="filter-bar" style="margin-bottom:16px;flex-wrap:wrap">
+        <select id="chart-year" onchange="onChartYearMonthChange()" style="font-family:var(--f)">
+          <option value="">所有年份</option>
+        </select>
+        <select id="chart-month" onchange="onChartYearMonthChange()" style="font-family:var(--f)">
+          <option value="">所有月份</option>
+          <option value="01">1月</option><option value="02">2月</option><option value="03">3月</option>
+          <option value="04">4月</option><option value="05">5月</option><option value="06">6月</option>
+          <option value="07">7月</option><option value="08">8月</option><option value="09">9月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
+        <input type="date" id="chart-from" onchange="onChartDateRangeChange()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
         <span style="font-size:12px;color:var(--muted)">～</span>
-        <input type="date" id="chart-to" onchange="renderChartPage(chartTabFilter)" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
-        <div id="chart-month-btns" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+        <input type="date" id="chart-to" onchange="onChartDateRangeChange()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none">
         <button class="btn btn-ghost btn-sm" onclick="clearChartDateFilter()">全部</button>
       </div>
 
@@ -644,7 +661,7 @@ LAL 湖人 @ 0.93
         </div>
       </div>
 
-      <div class="filter-bar">
+      <div class="filter-bar" style="flex-wrap:wrap;gap:8px">
         <select id="f-filter-league" onchange="renderHistory()" style="font-family:var(--f)">
           <option value="NBA">NBA</option>
           <option value="PLG">PLG</option>
@@ -652,12 +669,24 @@ LAL 湖人 @ 0.93
           <option value="MLB">MLB</option>
           <option value="">所有聯賽</option>
         </select>
-        <select id="f-filter-date" onchange="onDateSelectChange()" style="font-family:var(--f);min-width:110px">
-          <option value="">所有日期</option>
+
+        <!-- 年月快速篩選 -->
+        <select id="f-filter-year" onchange="onYearMonthChange()" style="font-family:var(--f)">
+          <option value="">所有年份</option>
         </select>
-        <input type="date" id="f-filter-date-from" onchange="renderHistory()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none" title="開始日期">
+        <select id="f-filter-month" onchange="onYearMonthChange()" style="font-family:var(--f)">
+          <option value="">所有月份</option>
+          <option value="01">1月</option><option value="02">2月</option><option value="03">3月</option>
+          <option value="04">4月</option><option value="05">5月</option><option value="06">6月</option>
+          <option value="07">7月</option><option value="08">8月</option><option value="09">9月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
+
+        <!-- 自訂日期範圍 -->
+        <input type="date" id="f-filter-date-from" onchange="onDateRangeChange()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none" title="開始日期">
         <span style="font-size:12px;color:var(--muted)">～</span>
-        <input type="date" id="f-filter-date-to" onchange="renderHistory()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none" title="結束日期">
+        <input type="date" id="f-filter-date-to" onchange="onDateRangeChange()" style="font-size:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;color:var(--text);outline:none" title="結束日期">
+
         <select id="f-filter-type" onchange="renderHistory()" style="font-family:var(--f)">
           <option value="">所有類型</option>
           <option value="下半場">下半場</option>
@@ -671,6 +700,7 @@ LAL 湖人 @ 0.93
         </select>
         <input type="text" id="f-filter-q" placeholder="搜尋賽事..." oninput="renderHistory()">
         <button class="btn btn-ghost btn-sm" onclick="clearFilters()">清除篩選</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportExcel(true)" style="color:var(--win);border-color:rgba(52,211,153,.3)">↓ 匯出篩選結果</button>
       </div>
       <div class="card">
         <div class="tbl-wrap">
@@ -1039,66 +1069,63 @@ async function submitBatch() {
 
 /* ── Dashboard ── */
 
-function filterByDateRange(bets, fromEl, toEl) {
-  const from = fromEl?.value || '';
-  const to   = toEl?.value   || '';
-  if (!from && !to) return bets;
-  return bets.filter(r => {
-    if (from && r.date < from) return false;
-    if (to   && r.date > to)   return false;
-    return true;
-  });
-}
+function populateYearSelects() { populateDateSelect(); }
 
-function buildMonthBtns(containerId, fromElId, toElId, callbackFn) {
-  // 從 allBets 抽取 YYYY-MM，產生月份快速按鈕
-  const monthSet = new Set();
-  allBets.forEach(r => {
-    if (r.date && r.date.length === 10) {
-      // YYYY-MM-DD → 取 YYYY-MM
-      monthSet.add(r.date.substring(0, 7));
-    }
-  });
-
-  const months = [...monthSet].sort();
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  container.innerHTML = months.map(ym => {
-    const [y, m] = ym.split('-');
-    return `<button class="type-tab btn-sm" style="padding:4px 10px;font-size:11px" data-ym="${ym}">${parseInt(m)}月${y !== String(new Date().getFullYear()) ? ' ' + y : ''}</button>`;
-  }).join('');
-
-  container.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const [y, m] = btn.dataset.ym.split('-');
-      const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate().toString().padStart(2, '0');
-      document.getElementById(fromElId).value = `${y}-${m}-01`;
-      document.getElementById(toElId).value   = `${y}-${m}-${lastDay}`;
-      container.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      callbackFn();
+function filterBetsByYearMonth(bets, yearElId, monthElId, fromElId, toElId) {
+  const year  = document.getElementById(yearElId)?.value  || '';
+  const month = document.getElementById(monthElId)?.value || '';
+  const from  = document.getElementById(fromElId)?.value  || '';
+  const to    = document.getElementById(toElId)?.value    || '';
+  if (year || month) {
+    return bets.filter(r => {
+      if (!r.date) return false;
+      if (year  && !r.date.startsWith(year)) return false;
+      if (month && r.date.substring(5, 7) !== month) return false;
+      return true;
     });
-  });
+  }
+  if (from || to) {
+    return bets.filter(r => {
+      if (from && r.date < from) return false;
+      if (to   && r.date > to)   return false;
+      return true;
+    });
+  }
+  return bets;
 }
 
-function clearDashDateFilter() {
+function onDashYearMonthChange() {
   document.getElementById('dash-from').value = '';
   document.getElementById('dash-to').value   = '';
-  document.querySelectorAll('#dash-month-btns .type-tab').forEach(b => b.classList.remove('active'));
   renderDashboard();
 }
-
-function clearChartDateFilter() {
+function onDashDateRangeChange() {
+  document.getElementById('dash-year').value  = '';
+  document.getElementById('dash-month').value = '';
+  renderDashboard();
+}
+function clearDashDateFilter() {
+  ['dash-year','dash-month','dash-from','dash-to'].forEach(id => document.getElementById(id).value = '');
+  renderDashboard();
+}
+function onChartYearMonthChange() {
   document.getElementById('chart-from').value = '';
   document.getElementById('chart-to').value   = '';
-  document.querySelectorAll('#chart-month-btns .type-tab').forEach(b => b.classList.remove('active'));
+  renderChartPage(chartTabFilter);
+}
+function onChartDateRangeChange() {
+  document.getElementById('chart-year').value  = '';
+  document.getElementById('chart-month').value = '';
+  renderChartPage(chartTabFilter);
+}
+function clearChartDateFilter() {
+  ['chart-year','chart-month','chart-from','chart-to'].forEach(id => document.getElementById(id).value = '');
   renderChartPage(chartTabFilter);
 }
 
 function renderDashboard() {
-  buildMonthBtns('dash-month-btns', 'dash-from', 'dash-to', 'renderDashboard');
-  const bets = filterByDateRange(allBets, document.getElementById('dash-from'), document.getElementById('dash-to'));
+  populateYearSelects();
+  const bets = filterBetsByYearMonth(allBets, 'dash-year', 'dash-month', 'dash-from', 'dash-to');
   const half = bets.filter(r => r.type === '下半場');
   const full = bets.filter(r => r.type === '初盤');
   const live = bets.filter(r => r.type === '走地');
@@ -1130,9 +1157,13 @@ function renderDashboard() {
   const liveProfit = live.reduce((s,r) => s + (+r.profit||0), 0);
   const liveROI    = liveBet ? ((liveProfit / liveBet) * 100).toFixed(1) : '--';
 
-  const fromVal = document.getElementById('dash-from')?.value;
-  const toVal   = document.getElementById('dash-to')?.value;
-  const rangeTxt = (fromVal || toVal) ? ` · ${fromVal||''}～${toVal||''}` : '';
+  const year  = document.getElementById('dash-year')?.value  || '';
+  const month = document.getElementById('dash-month')?.value || '';
+  const from  = document.getElementById('dash-from')?.value  || '';
+  const to    = document.getElementById('dash-to')?.value    || '';
+  let rangeTxt = '';
+  if (year || month) rangeTxt = ` · ${year ? year+'年' : ''}${month ? parseInt(month)+'月' : ''}`;
+  else if (from || to) rangeTxt = ` · ${from||''}～${to||''}`;
   document.getElementById('dash-sub').textContent = `${currentAccount} · 共 ${bets.length} 筆注單${rangeTxt}`;
   document.getElementById('dash-stats').innerHTML = `
     <div class="stat"><div class="stat-lbl">總投注</div><div class="stat-val">${fmtN(totalBet)}</div><div class="stat-sub">元</div></div>
@@ -1222,12 +1253,11 @@ function chartTab(val, btn) {
 
 function getChartBets() {
   let bets = chartLeagueFilter === 'all' ? allBets : allBets.filter(r => r.league === chartLeagueFilter);
-  bets = filterByDateRange(bets, document.getElementById('chart-from'), document.getElementById('chart-to'));
-  return bets;
+  return filterBetsByYearMonth(bets, 'chart-year', 'chart-month', 'chart-from', 'chart-to');
 }
 
 function renderChartPage(filter) {
-  buildMonthBtns('chart-month-btns', 'chart-from', 'chart-to', () => renderChartPage(chartTabFilter));
+  populateYearSelects();
   const base = getChartBets();
   const bets = filter === 'all' ? base : base.filter(r => r.type === filter);
   const half = filter === 'all' ? base.filter(r=>r.type==='下半場') : (filter==='下半場' ? bets : []);
@@ -1325,48 +1355,57 @@ function buildBarChart(id, bets) {
 
 /* ── History ── */
 function populateDateSelect() {
-  const dates = [...new Set(allBets.map(r => r.date))].sort((a,b) => b.localeCompare(a));
-  const sel = document.getElementById('f-filter-date');
-  if (!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">所有日期</option>' +
-    dates.map(d => {
-      // d is YYYY-MM-DD or MM-DD (legacy)
-      const parts = d.split('-');
-      const label = parts.length === 3 ? `${parseInt(parts[1])}/${parseInt(parts[2])} (${parts[0]})` : d;
-      return `<option value="${d}">${label}</option>`;
-    }).join('');
-  if (cur) sel.value = cur;
+  const years = [...new Set(allBets.map(r => r.date?.substring(0, 4)).filter(y => y && /^\d{4}$/.test(y)))].sort((a,b) => b - a);
+  // 填充所有三個頁面的年份下拉
+  ['dash-year', 'chart-year', 'f-filter-year'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">所有年份</option>' + years.map(y => `<option value="${y}">${y}年</option>`).join('');
+    if (cur) sel.value = cur;
+  });
 }
 
-function onDateSelectChange() {
-  const val = document.getElementById('f-filter-date').value;
-  if (val) {
-    // 把日期範圍清掉，用下拉的
-    document.getElementById('f-filter-date-from').value = '';
-    document.getElementById('f-filter-date-to').value = '';
-  }
+function onYearMonthChange() {
+  // 年月選了就清除日期範圍
+  document.getElementById('f-filter-date-from').value = '';
+  document.getElementById('f-filter-date-to').value = '';
   renderHistory();
 }
 
+function onDateRangeChange() {
+  // 日期範圍填了就清除年月
+  document.getElementById('f-filter-year').value = '';
+  document.getElementById('f-filter-month').value = '';
+  renderHistory();
+}
+
+function onDateSelectChange() { renderHistory(); }
+
 function renderHistory() {
-  const league  = document.getElementById('f-filter-league').value;
-  const dateOne = document.getElementById('f-filter-date').value;
-  const dateFrom= document.getElementById('f-filter-date-from').value;
-  const dateTo  = document.getElementById('f-filter-date-to').value;
-  const type    = document.getElementById('f-filter-type').value;
-  const result  = document.getElementById('f-filter-result').value;
-  const q       = document.getElementById('f-filter-q').value.toLowerCase();
+  const league   = document.getElementById('f-filter-league').value;
+  const year     = document.getElementById('f-filter-year').value;
+  const month    = document.getElementById('f-filter-month').value;
+  const dateFrom = document.getElementById('f-filter-date-from').value;
+  const dateTo   = document.getElementById('f-filter-date-to').value;
+  const type     = document.getElementById('f-filter-type').value;
+  const result   = document.getElementById('f-filter-result').value;
+  const q        = document.getElementById('f-filter-q').value.toLowerCase();
 
   let bets = [...allBets];
-  if (league)   bets = bets.filter(r => r.league === league);
-  if (type)     bets = bets.filter(r => r.type === type);
-  if (result)   bets = bets.filter(r => r.result === result);
-  if (q)        bets = bets.filter(r => (r.match_name||'').toLowerCase().includes(q) || (r.bet_team||'').toLowerCase().includes(q));
+  if (league) bets = bets.filter(r => r.league === league);
+  if (type)   bets = bets.filter(r => r.type === type);
+  if (result) bets = bets.filter(r => r.result === result);
+  if (q)      bets = bets.filter(r => (r.match_name||'').toLowerCase().includes(q) || (r.bet_team||'').toLowerCase().includes(q));
 
-  // 日期篩選：下拉優先，否則用範圍
-  if (dateOne) {
-    bets = bets.filter(r => r.date === dateOne);
+  // 年月篩選優先；否則用自訂日期範圍
+  if (year || month) {
+    bets = bets.filter(r => {
+      if (!r.date) return false;
+      if (year  && !r.date.startsWith(year)) return false;
+      if (month && r.date.substring(5, 7) !== month) return false;
+      return true;
+    });
   } else {
     if (dateFrom) bets = bets.filter(r => r.date >= dateFrom);
     if (dateTo)   bets = bets.filter(r => r.date <= dateTo);
@@ -1527,25 +1566,83 @@ async function deleteByDate() {
 }
 
 function clearFilters() {
+  document.getElementById('f-filter-league').value = '';
+  document.getElementById('f-filter-year').value = '';
+  document.getElementById('f-filter-month').value = '';
+  document.getElementById('f-filter-date-from').value = '';
+  document.getElementById('f-filter-date-to').value = '';
   document.getElementById('f-filter-type').value = '';
   document.getElementById('f-filter-result').value = '';
   document.getElementById('f-filter-q').value = '';
   renderHistory();
 }
 
-/* ── CSV Export ── */
-function exportCSV() {
-  const bets = allBets;
+/* ── Excel Export ── */
+function exportExcel(filteredOnly = false) {
+  let bets = allBets;
+
+  if (filteredOnly) {
+    // 套用目前歷史紀錄的篩選條件
+    const league   = document.getElementById('f-filter-league')?.value || '';
+    const year     = document.getElementById('f-filter-year')?.value || '';
+    const month    = document.getElementById('f-filter-month')?.value || '';
+    const dateFrom = document.getElementById('f-filter-date-from')?.value || '';
+    const dateTo   = document.getElementById('f-filter-date-to')?.value || '';
+    const type     = document.getElementById('f-filter-type')?.value || '';
+    const result   = document.getElementById('f-filter-result')?.value || '';
+    const q        = document.getElementById('f-filter-q')?.value.toLowerCase() || '';
+
+    if (league) bets = bets.filter(r => r.league === league);
+    if (type)   bets = bets.filter(r => r.type === type);
+    if (result) bets = bets.filter(r => r.result === result);
+    if (q)      bets = bets.filter(r => (r.match_name||'').toLowerCase().includes(q) || (r.bet_team||'').toLowerCase().includes(q));
+    if (year || month) {
+      bets = bets.filter(r => {
+        if (!r.date) return false;
+        if (year  && !r.date.startsWith(year)) return false;
+        if (month && r.date.substring(5, 7) !== month) return false;
+        return true;
+      });
+    } else {
+      if (dateFrom) bets = bets.filter(r => r.date >= dateFrom);
+      if (dateTo)   bets = bets.filter(r => r.date <= dateTo);
+    }
+    bets.sort((a,b) => b.date.localeCompare(a.date));
+  }
+
   if (!bets.length) { alert('沒有資料可匯出'); return; }
-  const header = '日期,類型,聯賽,賽事,下注隊伍,賠率,金額,有效下注,輸贏,結果';
-  const rows = bets.map(r =>
-    [r.date,r.type,r.league,r.match_name,r.bet_team,r.odds,r.amount,r.valid,r.profit,r.result].join(',')
-  );
-  const blob = new Blob([[header,...rows].join('\n')], { type:'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `bettrack_${currentAccount}_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
+
+  const rows = bets.map(r => ({
+    '日期':     r.date || '',
+    '類型':     r.type || '',
+    '聯賽':     r.league || '',
+    '賽事':     r.match_name || '',
+    '下注隊伍': r.bet_team || '',
+    '賠率':     +r.odds || 0,
+    '金額':     +r.amount || 0,
+    '有效下注': +r.valid || 0,
+    '輸贏':     +r.profit || 0,
+    '結果':     r.result || '',
+    '下注原因': Array.isArray(r.reasons) ? r.reasons.join('、') : (r.reasons || ''),
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  // 欄寬
+  ws['!cols'] = [
+    { wch: 12 }, { wch: 8 }, { wch: 6 }, { wch: 28 },
+    { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 10 },
+    { wch: 10 }, { wch: 6 }, { wch: 24 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const year  = document.getElementById('f-filter-year')?.value  || '';
+  const month = document.getElementById('f-filter-month')?.value || '';
+  const sheetName = (year && month) ? `${year}-${month}` : (year || '全部');
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+  const filename = `bettrack_${currentAccount}_${filteredOnly && (year||month) ? (year||'')+(month?month+'月':'') : new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, filename);
 }
 
 /* ── Bet Reasons ── */
